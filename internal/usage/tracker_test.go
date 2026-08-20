@@ -91,3 +91,13 @@ func TestTrackerSaturatesUsageOnOverflow(t *testing.T) {
 		t.Fatalf("saturated usage = %d, want %d", result.Usage.DownloadBytes, uint64(math.MaxUint64))
 	}
 }
+
+func TestTrackerPersistsAlertMarksInState(t *testing.T) {
+	t.Parallel()
+
+	tracker := NewTracker(model.State{}, time.UTC)
+	tracker.MarkAlert("total:100:70")
+	if !tracker.State().AlertedThresholds["total:100:70"] {
+		t.Fatal("alert mark was not retained in tracker state")
+	}
+}

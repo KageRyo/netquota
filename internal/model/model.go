@@ -74,8 +74,9 @@ func (c Config) Clone() Config {
 
 func (s State) Clone() State {
 	if s.AlertedThresholds != nil {
-		s.AlertedThresholds = make(map[string]bool, len(s.AlertedThresholds))
-		for key, value := range s.AlertedThresholds {
+		alertedThresholds := s.AlertedThresholds
+		s.AlertedThresholds = make(map[string]bool, len(alertedThresholds))
+		for key, value := range alertedThresholds {
 			s.AlertedThresholds[key] = value
 		}
 	}
