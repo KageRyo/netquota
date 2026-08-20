@@ -1,0 +1,24 @@
+# Go build output
+/bin/
+/dist/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Go tooling
+/.cache/
+coverage.out
+coverage.html
+
+# Local IDE/editor files
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Local NetQuota data
+config.json
+state.json
+
