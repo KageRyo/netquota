@@ -25,7 +25,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang lld libgl1-mesa-dev libegl1-mesa-dev libgles2-mesa-dev libwayland-dev xorg-dev xvfb language-pack-en
+          sudo apt-get install -y clang lld libgl1-mesa-dev libegl1-mesa-dev libgles2-mesa-dev libwayland-dev libxkbcommon-dev libxkbcommon-x11-dev xorg-dev xvfb language-pack-en
           echo "CC=clang" >> "$GITHUB_ENV"
           echo "CGO_LDFLAGS=-fuse-ld=lld" >> "$GITHUB_ENV"
           echo "LANG=en_US.UTF-8" >> "$GITHUB_ENV"
