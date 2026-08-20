@@ -43,7 +43,7 @@ func TestDetectAlertsForTotalAndSeparateDimensions(t *testing.T) {
 
 	quotas := model.Quotas{
 		Total:    model.Limit{Bytes: 100, AlertPercentages: []uint8{70, 95}},
-		Download: model.Limit{Bytes: 80, AlertPercentages: []uint8{50}},
+		Download: model.Limit{Bytes: 80, AlertPercentages: []uint8{70}},
 		Upload:   model.Limit{Bytes: 40, AlertPercentages: []uint8{75}},
 	}
 	alerts := DetectAlerts(
@@ -71,6 +71,16 @@ func TestDetectAlertsDoesNotRepeatAlreadyAlertedThreshold(t *testing.T) {
 	alerts := DetectAlerts(model.Usage{DownloadBytes: 69}, model.Usage{DownloadBytes: 80}, quotas, map[string]bool{key: true})
 	if len(alerts) != 0 {
 		t.Fatalf("got repeated alerts: %+v", alerts)
+	}
+}
+
+func TestDetectAlertsReportsCurrentUsageAfterLimitIsLowered(t *testing.T) {
+	t.Parallel()
+
+	quotas := model.Quotas{Total: model.Limit{Bytes: 50, AlertPercentages: []uint8{70}}}
+	alerts := DetectAlerts(model.Usage{DownloadBytes: 80}, model.Usage{DownloadBytes: 80}, quotas, nil)
+	if len(alerts) != 1 || alerts[0].Dimension != Total {
+		t.Fatalf("alerts after lowering limit = %+v", alerts)
 	}
 }
 

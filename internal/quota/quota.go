@@ -47,18 +47,16 @@ func Calculate(usage model.Usage, quotas model.Quotas) Status {
 	}
 }
 
-func DetectAlerts(previous, current model.Usage, quotas model.Quotas, already map[string]bool) []Alert {
-	previousTotal := saturatingAdd(previous.DownloadBytes, previous.UploadBytes)
+func DetectAlerts(_ model.Usage, current model.Usage, quotas model.Quotas, already map[string]bool) []Alert {
 	currentTotal := saturatingAdd(current.DownloadBytes, current.UploadBytes)
 	items := []struct {
 		dimension Dimension
-		previous  uint64
 		current   uint64
 		limit     model.Limit
 	}{
-		{dimension: Total, previous: previousTotal, current: currentTotal, limit: quotas.Total},
-		{dimension: Download, previous: previous.DownloadBytes, current: current.DownloadBytes, limit: quotas.Download},
-		{dimension: Upload, previous: previous.UploadBytes, current: current.UploadBytes, limit: quotas.Upload},
+		{dimension: Total, current: currentTotal, limit: quotas.Total},
+		{dimension: Download, current: current.DownloadBytes, limit: quotas.Download},
+		{dimension: Upload, current: current.UploadBytes, limit: quotas.Upload},
 	}
 
 	var alerts []Alert
@@ -71,7 +69,7 @@ func DetectAlerts(previous, current model.Usage, quotas model.Quotas, already ma
 			if already != nil && already[key] {
 				continue
 			}
-			if reached(item.current, item.limit.Bytes, percentage) && !reached(item.previous, item.limit.Bytes, percentage) {
+			if reached(item.current, item.limit.Bytes, percentage) {
 				alerts = append(alerts, Alert{
 					Key:        key,
 					Dimension:  item.dimension,
