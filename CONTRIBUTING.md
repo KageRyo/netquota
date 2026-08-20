@@ -38,4 +38,3 @@ NetQuota supports normal-user operation on Windows and Linux desktop environment
 ## Reporting problems
 
 Use the issue templates for reproducible bugs and focused feature proposals. Do not attach personal network identifiers, configuration files, or state files unless they have been sanitized.
-

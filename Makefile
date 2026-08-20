@@ -14,4 +14,3 @@ build:
 	go build -trimpath -o bin/netquota ./cmd/netquota
 
 check: vet test build
-

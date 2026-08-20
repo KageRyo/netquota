@@ -35,4 +35,3 @@ body:
       description: List the smallest set of steps that reproduces the problem.
     validations:
       required: true
-

@@ -150,4 +150,3 @@ See [docs/design.md](docs/design.md) for the component boundaries and data model
 The current development release is **NetQuota v0.1.0**. Releases use semantic version numbers such as \`v0.1.0\`.
 
 NetQuota is released under the [MIT License](LICENSE).
-

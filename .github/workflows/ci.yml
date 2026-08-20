@@ -51,4 +51,3 @@ jobs:
 
       - name: Build application
         run: go build -trimpath ./cmd/netquota
-

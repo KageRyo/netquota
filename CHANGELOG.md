@@ -13,4 +13,3 @@ This project follows Keep a Changelog and semantic versioning.
 - desktop notifications and a Fyne system tray UI
 - CLI, headless monitoring, interface listing, and start-on-login commands
 - unit tests and GitHub Actions checks for Windows and Linux
-

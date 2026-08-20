@@ -12,4 +12,3 @@
 ## Privacy check
 
 - [ ] No personal network identifiers, local settings, or usage state are included.
-

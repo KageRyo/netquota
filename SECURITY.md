@@ -18,4 +18,3 @@ Include:
 Do not include passwords, tokens, private IP details, or unsanitized config.json/state.json files.
 
 NetQuota is designed to keep usage and settings local. A report involving unexpected network access should include the exact command or build artifact that was used.
-
