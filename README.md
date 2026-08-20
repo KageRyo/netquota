@@ -34,7 +34,7 @@ Go 1.26 or newer is required. On Linux, Fyne needs the desktop development libra
 
 \`\`\`sh
 sudo apt-get update
-sudo apt-get install -y libgl1-mesa-dev libegl1-mesa-dev libwayland-dev xorg-dev
+sudo apt-get install -y libgl1-mesa-dev libegl1-mesa-dev libgles2-mesa-dev libwayland-dev libxkbcommon-dev libxkbcommon-x11-dev xorg-dev
 \`\`\`
 
 Run the tray application from a checkout:
