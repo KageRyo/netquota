@@ -80,6 +80,12 @@ func (m *Monitor) Config() model.Config {
 	return m.cfg.Clone()
 }
 
+func (m *Monitor) Interfaces(ctx context.Context) ([]network.Interface, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.provider.Interfaces(ctx)
+}
+
 func (m *Monitor) SetConfig(cfg model.Config) error {
 	if err := config.Validate(cfg); err != nil {
 		return err
