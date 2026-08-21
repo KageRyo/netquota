@@ -46,6 +46,7 @@ Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription:
 Source: "{#SourceDir}\netquota.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#SourceDir}\netquota-console.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#SourceDir}\README.md"; DestDir: "{app}"; Flags: isreadme
+Source: "{#SourceDir}\PRIVACY.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#SourceDir}\LICENSE.txt"; DestDir: "{app}"; DestName: "LICENSE"; Flags: ignoreversion
 
 [Icons]

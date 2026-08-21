@@ -2,6 +2,8 @@
 
 NetQuota is an open-source project. Releases are built from GitHub Actions and must be inspected as a draft before they are published.
 
+The project privacy notice is documented in [PRIVACY.md](../PRIVACY.md). Keep it aligned with any future network or telemetry behavior.
+
 ## Windows release flow
 
 From WSL, start the manual workflow:

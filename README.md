@@ -1,6 +1,7 @@
 # NetQuota
 
 [![CI](https://github.com/KageRyo/netquota/actions/workflows/ci.yml/badge.svg)](https://github.com/KageRyo/netquota/actions/workflows/ci.yml)
+[![Latest release](https://img.shields.io/github/v/release/KageRyo/netquota?display_name=tag&sort=semver)](https://github.com/KageRyo/netquota/releases)
 [![Go Reference](https://pkg.go.dev/badge/github.com/KageRyo/netquota.svg)](https://pkg.go.dev/github.com/KageRyo/netquota)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
@@ -173,3 +174,5 @@ See [docs/design.md](docs/design.md) for the component boundaries and data model
 The current development release is **NetQuota v0.1.0**. Releases use semantic version numbers such as `v0.1.0`.
 
 NetQuota is released under the [MIT License](LICENSE).
+
+See the [Privacy Policy](PRIVACY.md) for information about local data storage and the background GitHub release check.

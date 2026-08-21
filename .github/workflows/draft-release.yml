@@ -141,7 +141,7 @@ jobs:
             Write-Host "No Windows signing certificate configured; building unsigned artifacts."
           }
 
-          Copy-Item README.md, LICENSE $staging
+          Copy-Item README.md, LICENSE, PRIVACY.md $staging
           Copy-Item LICENSE "$staging\LICENSE.txt"
           $sourceDir = (Resolve-Path $staging).Path
           $iscc = (Get-Command iscc.exe -ErrorAction Stop).Source
