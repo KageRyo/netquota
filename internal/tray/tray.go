@@ -34,15 +34,7 @@ func Run(ctx context.Context, monitor *monitorapp.Monitor, executable string) {
 	window.SetCloseIntercept(window.Hide)
 
 	if desktopApp, ok := application.(desktop.App); ok {
-		desktopApp.SetSystemTrayIcon(theme.ComputerIcon())
-		desktopApp.SetSystemTrayMenu(fyne.NewMenu("NetQuota",
-			fyne.NewMenuItem("Show window", func() {
-				window.Show()
-			}),
-			fyne.NewMenuItem("Settings", ui.showSettings),
-			fyne.NewMenuItemSeparator(),
-			fyne.NewMenuItem("Quit", application.Quit),
-		))
+		desktopApp.SetSystemTrayMenu(newTrayMenu(window, ui.showSettings))
 		desktopApp.SetSystemTrayWindow(window)
 	}
 
@@ -51,11 +43,22 @@ func Run(ctx context.Context, monitor *monitorapp.Monitor, executable string) {
 	go ui.poll(pollContext)
 	go func() {
 		<-pollContext.Done()
-		application.Quit()
+		fyne.Do(func() {
+			application.Quit()
+		})
 	}()
 	window.Show()
 	application.Run()
 	cancel()
+}
+
+func newTrayMenu(window fyne.Window, showSettings func()) *fyne.Menu {
+	return fyne.NewMenu("NetQuota",
+		fyne.NewMenuItem("Show window", func() {
+			window.Show()
+		}),
+		fyne.NewMenuItem("Settings", showSettings),
+	)
 }
 
 type ui struct {

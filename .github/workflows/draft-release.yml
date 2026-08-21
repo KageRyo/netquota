@@ -49,7 +49,8 @@ jobs:
         run: |
           $staging = "release\netquota-windows-amd64"
           New-Item -ItemType Directory -Force $staging | Out-Null
-          go build -trimpath -o "$staging\netquota.exe" .\cmd\netquota
+          go build -trimpath -tags migrated_fynedo -ldflags='-H=windowsgui -s -w' -o "$staging\netquota.exe" .\cmd\netquota
+          go build -trimpath -tags migrated_fynedo -ldflags='-s -w' -o "$staging\netquota-console.exe" .\cmd\netquota
           Copy-Item README.md, LICENSE $staging
           Compress-Archive -Path "$staging\*" -DestinationPath "netquota-windows-amd64.zip" -Force
 

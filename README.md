@@ -70,7 +70,12 @@ WSL can run the tests and trigger the Windows build, but it cannot run the Windo
 gh workflow run draft-release.yml --ref main -f tag=v0.1.0
 ```
 
-The workflow runs formatting, vet, and unit tests on `windows-latest`, builds `netquota-windows-amd64.zip`, and attaches it to a GitHub draft release. Download the zip from the draft release and run `netquota.exe` on a Windows machine. A draft is not published until a maintainer explicitly publishes it.
+The workflow runs formatting, vet, and unit tests on `windows-latest`, builds `netquota-windows-amd64.zip`, and attaches it to a GitHub draft release. The archive contains two portable binaries:
+
+- `netquota.exe` is the tray application built with the Windows GUI subsystem, so launching it does not open a console window.
+- `netquota-console.exe` is the console-enabled build for `--version`, `--list-interfaces`, `--once`, `--headless`, and diagnostics.
+
+Extract the archive and run `netquota.exe` on a Windows machine. This draft artifact is portable, not an installer: it does not create an Add/Remove Programs entry or provide an uninstaller. The Settings page's start-on-login option only registers the selected executable to launch with the user session; it is separate from installation. A draft is not published until a maintainer explicitly publishes it.
 
 ## Configuration
 

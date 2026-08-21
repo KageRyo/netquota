@@ -68,6 +68,26 @@ func TestReadSettingsKeepsInterfaceIdentity(t *testing.T) {
 	}
 }
 
+func TestTrayMenuLeavesQuitToFyne(t *testing.T) {
+	t.Parallel()
+
+	menu := newTrayMenu(nil, func() {})
+	if len(menu.Items) != 2 {
+		t.Fatalf("tray menu item count = %d, want 2", len(menu.Items))
+	}
+	if got, want := menu.Items[0].Label, "Show window"; got != want {
+		t.Fatalf("first tray item = %q, want %q", got, want)
+	}
+	if got, want := menu.Items[1].Label, "Settings"; got != want {
+		t.Fatalf("second tray item = %q, want %q", got, want)
+	}
+	for _, item := range menu.Items {
+		if item.IsQuit || item.IsSeparator {
+			t.Fatalf("tray item %q should not be an app-provided quit/separator item", item.Label)
+		}
+	}
+}
+
 func newSelectForTest(selected string) *widget.Select {
 	result := widget.NewSelect([]string{selected}, nil)
 	result.Selected = selected
