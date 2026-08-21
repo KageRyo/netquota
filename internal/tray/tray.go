@@ -2,8 +2,11 @@ package tray
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/url"
+	"os"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -126,6 +129,13 @@ func (m *trayMenu) setUpdateAvailable(tag string, openRelease func()) {
 	m.updateItem.Label = "Update available: " + tag
 	m.updateItem.Action = openRelease
 	m.updateItem.Disabled = false
+	m.menu.Refresh()
+}
+
+func (m *trayMenu) setUpdating() {
+	m.updateItem.Label = "Downloading update…"
+	m.updateItem.Action = nil
+	m.updateItem.Disabled = true
 	m.menu.Refresh()
 }
 
@@ -267,31 +277,166 @@ func (u *ui) startUpdateCheck(ctx context.Context, interactive bool) {
 				return
 			}
 			u.trayMenu.setUpdateAvailable(release.TagName, func() {
-				u.openRelease(release)
+				u.confirmUpdate(release)
 			})
 			if interactive {
-				dialog.ShowInformation("NetQuota update available", "NetQuota "+release.TagName+" is ready to download.", u.window)
+				u.confirmUpdate(release)
 			}
 		})
 	}()
 }
 
-func (u *ui) openRelease(release updateapp.Release) {
-	target := release.DownloadURL
-	if target == "" {
-		target = release.PageURL
+func (u *ui) confirmUpdate(release updateapp.Release) {
+	if release.DownloadURL == "" {
+		dialog.ShowInformation("Update available", "NetQuota "+release.TagName+" is available on the release page, but no compatible package was published.", u.window)
+		u.openReleasePage(release)
+		return
 	}
-	parsed, err := url.Parse(target)
-	if err != nil || parsed.Scheme != "https" || !strings.EqualFold(parsed.Host, "github.com") {
-		if err == nil {
-			err = fmt.Errorf("unexpected release URL %q", target)
+	if release.ChecksumURL == "" {
+		dialog.ShowConfirm("Open release page?", "This release does not include a checksum manifest, so NetQuota cannot install it automatically.", func(open bool) {
+			if open {
+				u.openReleasePage(release)
+			}
+		}, u.window)
+		return
+	}
+	dialog.ShowConfirm("Install update?", "Download and install NetQuota "+release.TagName+" now? The application will restart after installation.", func(confirmed bool) {
+		if confirmed {
+			u.downloadAndInstall(release)
 		}
+	}, u.window)
+}
+
+func (u *ui) downloadAndInstall(release updateapp.Release) {
+	if u.trayMenu != nil {
+		u.trayMenu.setUpdating()
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	progress := widget.NewProgressBar()
+	status := widget.NewLabel("Preparing download…")
+	content := container.NewVBox(status, progress)
+	var progressDialog *dialog.CustomDialog
+	progressDialog = dialog.NewCustomWithoutButtons("Downloading NetQuota update", content, u.window)
+	cancelButton := widget.NewButton("Cancel", func() {
+		cancel()
+		progressDialog.Hide()
+		u.restoreUpdateAction(release)
+	})
+	progressDialog.SetButtons([]fyne.CanvasObject{cancelButton})
+	progressDialog.Show()
+
+	go func() {
+		updateDirectory, err := os.MkdirTemp("", "netquota-update-*")
+		if err != nil {
+			u.finishUpdateDownload(progressDialog, release, cancel, fmt.Errorf("prepare update directory: %w", err))
+			return
+		}
+		path, err := u.updateChecker.Download(ctx, release, updateDirectory, func(written, total int64) {
+			fyne.Do(func() {
+				if total > 0 {
+					progress.SetValue(float64(written) / float64(total))
+					status.SetText(fmt.Sprintf("Downloaded %s of %s", format.Bytes(uint64(written)), format.Bytes(uint64(total))))
+				} else {
+					status.SetText("Downloaded " + format.Bytes(uint64(written)))
+				}
+			})
+		})
+		if err != nil {
+			_ = os.RemoveAll(updateDirectory)
+			u.finishUpdateDownload(progressDialog, release, cancel, err)
+			return
+		}
+		if err := ctx.Err(); err != nil {
+			_ = os.RemoveAll(updateDirectory)
+			u.finishUpdateDownload(progressDialog, release, cancel, err)
+			return
+		}
+
+		if err := enterInstallingState(ctx, status, cancelButton); err != nil {
+			_ = os.RemoveAll(updateDirectory)
+			u.finishUpdateDownload(progressDialog, release, cancel, err)
+			return
+		}
+		installErr := updateapp.Install(context.Background(), path, u.executable)
+		if runtime.GOOS != "windows" || installErr != nil {
+			_ = os.RemoveAll(updateDirectory)
+		}
+		if installErr != nil {
+			u.finishUpdateDownload(progressDialog, release, cancel, installErr)
+			return
+		}
+		fyne.Do(func() {
+			cancel()
+			progressDialog.Hide()
+			u.application.Quit()
+		})
+	}()
+}
+
+func enterInstallingState(ctx context.Context, status *widget.Label, cancelButton *widget.Button) error {
+	var transitionErr error
+	fyne.DoAndWait(func() {
+		if err := ctx.Err(); err != nil {
+			transitionErr = err
+			return
+		}
+		status.SetText("Installing update…")
+		cancelButton.Disable()
+	})
+	return transitionErr
+}
+
+func (u *ui) finishUpdateDownload(progressDialog *dialog.CustomDialog, release updateapp.Release, cancel context.CancelFunc, err error) {
+	fyne.Do(func() {
+		cancel()
+		progressDialog.Hide()
+		if errors.Is(err, context.Canceled) {
+			u.restoreUpdateAction(release)
+			return
+		}
+		u.restoreUpdateAction(release)
+		if errors.Is(err, updateapp.ErrUnsupportedPlatform) || errors.Is(err, os.ErrPermission) {
+			dialog.ShowConfirm("Automatic update unavailable", err.Error()+" Open the release page instead?", func(open bool) {
+				if open {
+					u.openReleasePage(release)
+				}
+			}, u.window)
+			return
+		}
+		dialog.ShowError(err, u.window)
+	})
+}
+
+func (u *ui) restoreUpdateAction(release updateapp.Release) {
+	if u.trayMenu == nil {
+		return
+	}
+	u.trayMenu.setUpdateAvailable(release.TagName, func() {
+		u.confirmUpdate(release)
+	})
+}
+
+func (u *ui) openReleasePage(release updateapp.Release) {
+	parsed, err := releasePageURL(release)
+	if err != nil {
 		dialog.ShowError(fmt.Errorf("open update: %w", err), u.window)
 		return
 	}
 	if err := u.application.OpenURL(parsed); err != nil {
 		dialog.ShowError(fmt.Errorf("open update: %w", err), u.window)
 	}
+}
+
+func releasePageURL(release updateapp.Release) (*url.URL, error) {
+	parsed, err := url.Parse(release.PageURL)
+	if err != nil {
+		return nil, err
+	}
+	if parsed.Scheme != "https" || parsed.User != nil || !strings.EqualFold(parsed.Host, "github.com") {
+		return nil, fmt.Errorf("unexpected release URL %q", release.PageURL)
+	}
+	return parsed, nil
 }
 
 func (u *ui) showSettings() {

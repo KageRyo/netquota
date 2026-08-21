@@ -32,6 +32,7 @@ Each enabled limit has its own notification percentages. A limit of `0` disables
 - Counter reset detection after reboot or interface reconnect
 - Atomic JSON persistence for configuration and daily state
 - Optional start-on-login setup for Windows and Linux
+- User-confirmed, checksum-verified updates for supported Windows and Linux releases
 - CLI inspection mode for troubleshooting without opening the tray
 
 ## Quick start
@@ -73,10 +74,10 @@ The tray window's Settings page lets you select the interface, change each quota
 WSL can run the tests and trigger the release workflow, but it cannot run the Windows system tray UI itself. Maintainers can trigger the manual [`draft-release.yml`](.github/workflows/draft-release.yml) workflow from WSL:
 
 ```sh
-gh workflow run draft-release.yml --ref main -f tag=v0.1.0-alpha.1
+gh workflow run draft-release.yml --ref main -f tag=v0.1.0-alpha.3
 ```
 
-The workflow runs formatting, vet, and unit tests on both `windows-latest` and `ubuntu-latest`, then attaches Windows portable/installer artifacts and a Linux portable archive to a GitHub draft release.
+The workflow runs formatting, vet, and unit tests on both `windows-latest` and `ubuntu-latest`, then attaches Windows portable/installer artifacts, a Linux portable archive, and `SHA256SUMS` to a GitHub draft release.
 
 ### Windows
 
@@ -87,7 +88,7 @@ The Windows portable archive contains two binaries:
 
 Extract the archive and run `netquota.exe` on a Windows machine for the portable option. The `netquota-windows-amd64-setup.exe` installer displays the MIT License and requires acceptance before installing the same two binaries for the current Windows user, creates a Start Menu shortcut, and registers an uninstaller. The Settings page's start-on-login option only registers the selected executable to launch with the user session; it is separate from installation.
 
-Both Windows distributions check published GitHub releases in the background. Stable builds consider stable releases only; alpha, beta, and release-candidate builds can also see newer pre-releases. When a newer version is available, the tray menu shows `Update available: vX.Y.Z`; selecting it opens the installer download, or the release page if an installer asset is unavailable. Updates are user-confirmed rather than silently replacing a running executable. Draft releases are not considered updates until a maintainer publishes them.
+Both Windows distributions check published GitHub releases in the background. Stable builds consider stable releases only; alpha, beta, and release-candidate builds can also see newer pre-releases. When a newer version is available, the tray menu shows `Update available: vX.Y.Z`; selecting it asks for confirmation, downloads the installer, verifies its SHA-256 checksum, and starts the installer. If the release does not provide a compatible or verifiable package, NetQuota opens the release page instead. Updates are user-confirmed rather than silently replacing a running executable. Draft releases are not considered updates until a maintainer publishes them.
 
 ### Linux
 
@@ -95,7 +96,7 @@ The Linux artifact is `netquota-linux-amd64.tar.gz`. It contains one GUI/CLI bin
 
 Install the Linux desktop libraries listed in [Quick start](#quick-start), extract the archive, and run `./netquota`. This is a portable amd64 archive rather than a distro-specific `.deb`, AppImage, or repository package.
 
-Linux builds also check published GitHub releases in the background; when a newer version is available, the tray menu opens the matching Linux archive for download. Updates are user-confirmed rather than silently replacing a running executable.
+Linux builds also check published GitHub releases in the background; when a newer version is available, the tray menu asks for confirmation, downloads the matching archive, verifies its SHA-256 checksum, replaces the portable binary atomically, and restarts NetQuota. This requires the extracted application directory to be writable; otherwise the release page is offered as a fallback. Updates are user-confirmed rather than silently replacing a running executable.
 
 Windows release artifacts are unsigned unless the repository's signing secrets are configured. See [docs/releasing.md](docs/releasing.md) for the code-signing procedure and the draft-release gate.
 
@@ -190,7 +191,7 @@ See [docs/design.md](docs/design.md) for the component boundaries and data model
 
 ## Versioning and license
 
-The current development release is **NetQuota v0.1.0-alpha.1**. Releases use semantic version numbers such as `v0.1.0`, with pre-release tags such as `v0.1.0-alpha.1`.
+The current development release is **NetQuota v0.1.0-alpha.2**. Releases use semantic version numbers such as `v0.1.0`, with pre-release tags such as `v0.1.0-alpha.2`.
 
 NetQuota is released under the [MIT License](LICENSE).
 

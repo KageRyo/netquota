@@ -6,7 +6,7 @@ on:
       tag:
         description: Release tag to create or update
         required: true
-        default: v0.1.0-alpha.1
+        default: v0.1.0-alpha.3
         type: string
 
 permissions:
@@ -329,6 +329,19 @@ jobs:
           name: netquota-linux-amd64
           path: dist
 
+      - name: Generate release checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          (
+            cd dist
+            sha256sum \
+              netquota-windows-amd64.zip \
+              netquota-windows-amd64-setup.exe \
+              netquota-linux-amd64.tar.gz \
+              > SHA256SUMS
+          )
+
       - name: Create or update draft release
         shell: bash
         env:
@@ -359,6 +372,7 @@ jobs:
               dist/netquota-windows-amd64.zip \
               dist/netquota-windows-amd64-setup.exe \
               dist/netquota-linux-amd64.tar.gz \
+              dist/SHA256SUMS \
               --clobber
           else
             release_create_args=(
@@ -374,6 +388,7 @@ jobs:
               dist/netquota-windows-amd64.zip \
               dist/netquota-windows-amd64-setup.exe \
               dist/netquota-linux-amd64.tar.gz \
+              dist/SHA256SUMS \
               "${release_create_args[@]}"
           fi
 
