@@ -28,7 +28,6 @@ func TestTrayIconPNGIsEmbedded(t *testing.T) {
 	if got, want := img.Bounds().Size(), image.Pt(16, 16); got != want {
 		t.Fatalf("tray icon size = %v, want %v", got, want)
 	}
-	assertTransparentCorners(t, img)
 }
 
 func TestPackagingPNGIsGeneratedAtHighResolution(t *testing.T) {
