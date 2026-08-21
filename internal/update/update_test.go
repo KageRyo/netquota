@@ -2,8 +2,12 @@ package update
 
 import (
 	"context"
+	"crypto/sha256"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"runtime"
 	"testing"
 )
@@ -20,7 +24,8 @@ func TestCheckReportsNewerReleaseAndPlatformDownload(t *testing.T) {
                 "html_url": "https://github.com/KageRyo/netquota/releases/tag/v0.2.0",
                 "assets": [
                     {"name": "netquota-windows-amd64-setup.exe", "browser_download_url": "https://example.test/setup.exe"},
-                    {"name": "netquota-linux-amd64.tar.gz", "browser_download_url": "https://example.test/netquota.tar.gz"}
+                    {"name": "netquota-linux-amd64.tar.gz", "browser_download_url": "https://example.test/netquota.tar.gz"},
+                    {"name": "SHA256SUMS", "browser_download_url": "https://example.test/SHA256SUMS"}
                 ]
             }
         ]`))
@@ -43,6 +48,127 @@ func TestCheckReportsNewerReleaseAndPlatformDownload(t *testing.T) {
 	}
 	if release.TagName != "v0.2.0" || release.DownloadURL != wantURL {
 		t.Fatalf("release = %+v, want download URL %q", release, wantURL)
+	}
+	if release.AssetName != platformAssetName(runtime.GOOS, runtime.GOARCH) {
+		t.Fatalf("release asset name = %q, want %q", release.AssetName, platformAssetName(runtime.GOOS, runtime.GOARCH))
+	}
+	if release.ChecksumURL != "https://example.test/SHA256SUMS" {
+		t.Fatalf("release checksum URL = %q, want the checksum asset URL", release.ChecksumURL)
+	}
+}
+
+func TestChecksumForAsset(t *testing.T) {
+	want := "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+	got, err := checksumForAsset(want+"  "+linuxPackageAsset+"\n", linuxPackageAsset)
+	if err != nil {
+		t.Fatalf("checksumForAsset: %v", err)
+	}
+	if got != want {
+		t.Fatalf("checksumForAsset = %q, want %q", got, want)
+	}
+}
+
+func TestCheckerDownloadRequiresChecksumManifest(t *testing.T) {
+	_, err := (Checker{}).Download(context.Background(), Release{
+		AssetName:   linuxPackageAsset,
+		DownloadURL: "https://github.com/KageRyo/netquota/releases/download/v0.1.0/netquota-linux-amd64.tar.gz",
+	}, t.TempDir(), nil)
+	if err != ErrUnverifiedDownload {
+		t.Fatalf("Download error = %v, want %v", err, ErrUnverifiedDownload)
+	}
+}
+
+func TestDownloadVerifiedWritesAndReportsProgress(t *testing.T) {
+	payload := []byte("verified NetQuota update")
+	digest := fmt.Sprintf("%x", sha256.Sum256(payload))
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/update.tar.gz" {
+			t.Fatalf("request path = %q, want /update.tar.gz", r.URL.Path)
+		}
+		w.Header().Set("Content-Length", fmt.Sprint(len(payload)))
+		_, _ = w.Write(payload)
+	}))
+	defer server.Close()
+
+	destination := t.TempDir()
+	var lastWritten, lastTotal int64
+	path, err := downloadVerified(
+		context.Background(),
+		server.Client(),
+		server.URL+"/update.tar.gz",
+		linuxPackageAsset,
+		digest,
+		int64(len(payload)),
+		destination,
+		func(written, total int64) {
+			lastWritten, lastTotal = written, total
+		},
+	)
+	if err != nil {
+		t.Fatalf("downloadVerified: %v", err)
+	}
+	defer os.Remove(path)
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read downloaded update: %v", err)
+	}
+	if string(got) != string(payload) {
+		t.Fatalf("downloaded payload = %q, want %q", got, payload)
+	}
+	if lastWritten != int64(len(payload)) || lastTotal != int64(len(payload)) {
+		t.Fatalf("last progress = (%d, %d), want (%d, %d)", lastWritten, lastTotal, len(payload), len(payload))
+	}
+	if filepath.Dir(path) != destination {
+		t.Fatalf("download path = %q, want it below %q", path, destination)
+	}
+}
+
+func TestDownloadVerifiedRemovesChecksumMismatch(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("tampered"))
+	}))
+	defer server.Close()
+
+	destination := t.TempDir()
+	_, err := downloadVerified(
+		context.Background(),
+		server.Client(),
+		server.URL,
+		linuxPackageAsset,
+		"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+		0,
+		destination,
+		nil,
+	)
+	if err == nil {
+		t.Fatal("downloadVerified succeeded for a checksum mismatch")
+	}
+	entries, err := os.ReadDir(destination)
+	if err != nil {
+		t.Fatalf("read download directory: %v", err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("download directory contains %d files after checksum failure", len(entries))
+	}
+}
+
+func TestValidateReleaseURL(t *testing.T) {
+	for _, url := range []string{
+		"https://github.com/KageRyo/netquota/releases/download/v0.1.0/netquota.tar.gz",
+		"https://release-assets.githubusercontent.com/example",
+	} {
+		if err := validateReleaseURL(url); err != nil {
+			t.Errorf("validateReleaseURL(%q): %v", url, err)
+		}
+	}
+	for _, url := range []string{
+		"http://github.com/KageRyo/netquota/releases/download/v0.1.0/netquota.tar.gz",
+		"https://example.com/netquota.tar.gz",
+		"https://github.com@example.com/netquota.tar.gz",
+	} {
+		if err := validateReleaseURL(url); err == nil {
+			t.Errorf("validateReleaseURL(%q) succeeded, want an error", url)
+		}
 	}
 }
 

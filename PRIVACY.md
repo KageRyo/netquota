@@ -16,7 +16,7 @@ While the tray application is running, NetQuota checks the public GitHub Release
 
 As with any connection to GitHub, GitHub may receive standard request and service-usage information such as an IP address, device or application information, and the time of the request. This information is handled under [GitHub's General Privacy Statement](https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement), not by NetQuota or its maintainers.
 
-If an update is available, selecting the update action opens the GitHub release or installer URL in the user's default browser. The browser and GitHub then handle that connection under their own policies.
+If an update is available and the user confirms installation, NetQuota downloads the compatible release asset and its `SHA256SUMS` manifest directly from GitHub, verifies the asset locally, and starts the platform installer or portable replacement. If automatic installation is unavailable, the GitHub release page can be opened in the user's default browser. GitHub handles these connections under its own policies.
 
 Update checks are not required for accounting. If GitHub is unavailable or the request is blocked, NetQuota continues monitoring local network counters.
 
