@@ -75,9 +75,11 @@ The workflow runs formatting, vet, and unit tests on `windows-latest`, builds bo
 - `netquota.exe` is the tray application built with the Windows GUI subsystem, so launching it does not open a console window.
 - `netquota-console.exe` is the console-enabled build for `--version`, `--list-interfaces`, `--once`, `--headless`, and diagnostics.
 
-Extract the archive and run `netquota.exe` on a Windows machine for the portable option. The `netquota-windows-amd64-setup.exe` installer installs the same two binaries for the current Windows user, creates a Start Menu shortcut, and registers an uninstaller. The Settings page's start-on-login option only registers the selected executable to launch with the user session; it is separate from installation.
+Extract the archive and run `netquota.exe` on a Windows machine for the portable option. The `netquota-windows-amd64-setup.exe` installer displays the MIT License and requires acceptance before installing the same two binaries for the current Windows user, creates a Start Menu shortcut, and registers an uninstaller. The Settings page's start-on-login option only registers the selected executable to launch with the user session; it is separate from installation.
 
 Both Windows distributions check the latest published GitHub release in the background. When a newer version is available, the tray menu shows `Update available: vX.Y.Z`; selecting it opens the installer download, or the release page if an installer asset is unavailable. Updates are user-confirmed rather than silently replacing a running executable. A draft release is not considered an update until a maintainer publishes it.
+
+Windows release artifacts are unsigned unless the repository's signing secrets are configured. See [docs/releasing.md](docs/releasing.md) for the code-signing procedure and the draft-release gate.
 
 A draft is not published until a maintainer explicitly publishes it.
 

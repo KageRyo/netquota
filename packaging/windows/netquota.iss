@@ -15,6 +15,7 @@ AppPublisher=KageRyo
 AppPublisherURL=https://github.com/KageRyo/netquota
 AppSupportURL=https://github.com/KageRyo/netquota/issues
 AppUpdatesURL=https://github.com/KageRyo/netquota/releases/latest
+LicenseFile="{#SourceDir}\LICENSE.txt"
 DefaultDirName={localappdata}\Programs\NetQuota
 DefaultGroupName=NetQuota
 DisableProgramGroupPage=yes
@@ -45,7 +46,7 @@ Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription:
 Source: "{#SourceDir}\netquota.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#SourceDir}\netquota-console.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#SourceDir}\README.md"; DestDir: "{app}"; Flags: isreadme
-Source: "{#SourceDir}\LICENSE"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#SourceDir}\LICENSE.txt"; DestDir: "{app}"; DestName: "LICENSE"; Flags: ignoreversion
 
 [Icons]
 Name: "{autoprograms}\NetQuota"; Filename: "{app}\netquota.exe"; WorkingDir: "{app}"

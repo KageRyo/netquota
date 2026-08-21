@@ -48,6 +48,9 @@ jobs:
         shell: pwsh
         env:
           RELEASE_TAG: ${{ inputs.tag }}
+          WINDOWS_SIGNING_CERTIFICATE_BASE64: ${{ secrets.WINDOWS_SIGNING_CERTIFICATE_BASE64 }}
+          WINDOWS_SIGNING_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_SIGNING_CERTIFICATE_PASSWORD }}
+          WINDOWS_SIGNING_TIMESTAMP_URL: ${{ vars.WINDOWS_SIGNING_TIMESTAMP_URL }}
         run: |
           if ($env:RELEASE_TAG -notmatch '^v[0-9]+\.[0-9]+\.[0-9]+$') {
             Write-Error "tag must use the form vX.Y.Z"
@@ -61,14 +64,101 @@ jobs:
           $consoleLdflags = "-s -w $versionLdflag"
           go build -trimpath -tags migrated_fynedo -ldflags $guiLdflags -o "$staging\netquota.exe" .\cmd\netquota
           go build -trimpath -tags migrated_fynedo -ldflags $consoleLdflags -o "$staging\netquota-console.exe" .\cmd\netquota
+
+          $hasCertificate = -not [string]::IsNullOrWhiteSpace($env:WINDOWS_SIGNING_CERTIFICATE_BASE64)
+          $hasPassword = -not [string]::IsNullOrWhiteSpace($env:WINDOWS_SIGNING_CERTIFICATE_PASSWORD)
+          if ($hasCertificate -xor $hasPassword) {
+            throw "Both WINDOWS_SIGNING_CERTIFICATE_BASE64 and WINDOWS_SIGNING_CERTIFICATE_PASSWORD are required for code signing."
+          }
+
+          $certificatePath = $null
+          $signtoolPath = $null
+          if ($hasCertificate) {
+            $certificatePath = Join-Path $env:RUNNER_TEMP "netquota-signing.pfx"
+            $certificateBase64 = $env:WINDOWS_SIGNING_CERTIFICATE_BASE64 -replace '\s', ''
+            [System.IO.File]::WriteAllBytes(
+              $certificatePath,
+              [Convert]::FromBase64String($certificateBase64)
+            )
+
+            $signtoolCommand = Get-Command signtool.exe -ErrorAction SilentlyContinue
+            if ($signtoolCommand) {
+              $signtoolPath = $signtoolCommand.Source
+            } else {
+              $signtoolPath = Get-ChildItem `
+                -Path "${env:ProgramFiles(x86)}\Windows Kits\10\bin" `
+                -Filter signtool.exe `
+                -Recurse `
+                -File `
+                -ErrorAction SilentlyContinue |
+                Where-Object { $_.FullName -match '\\x64\\signtool\.exe$' } |
+                Sort-Object FullName -Descending |
+                Select-Object -First 1 -ExpandProperty FullName
+            }
+            if ([string]::IsNullOrWhiteSpace($signtoolPath)) {
+              throw "signtool.exe was not found on the Windows runner."
+            }
+
+            $timestampUrl = $env:WINDOWS_SIGNING_TIMESTAMP_URL
+            if ([string]::IsNullOrWhiteSpace($timestampUrl)) {
+              $timestampUrl = "http://timestamp.digicert.com"
+            }
+
+            function Sign-Binary {
+              param([string]$Path)
+
+              & $signtoolPath sign `
+                /fd SHA256 `
+                /td SHA256 `
+                /tr $timestampUrl `
+                /f $certificatePath `
+                /p $env:WINDOWS_SIGNING_CERTIFICATE_PASSWORD `
+                $Path
+              if ($LASTEXITCODE -ne 0) {
+                throw "signtool failed to sign $Path."
+              }
+            }
+
+            function Verify-Binary {
+              param([string]$Path)
+
+              & $signtoolPath verify /pa /all $Path
+              if ($LASTEXITCODE -ne 0) {
+                throw "signtool failed to verify $Path."
+              }
+            }
+
+            $signedBinaries = @(
+              "$staging\netquota.exe",
+              "$staging\netquota-console.exe"
+            )
+            foreach ($binary in $signedBinaries) {
+              Sign-Binary $binary
+              Verify-Binary $binary
+            }
+            Write-Host "Windows binaries were Authenticode-signed."
+          } else {
+            Write-Host "No Windows signing certificate configured; building unsigned artifacts."
+          }
+
           Copy-Item README.md, LICENSE $staging
-          Compress-Archive -Path "$staging\*" -DestinationPath "netquota-windows-amd64.zip" -Force
+          Copy-Item LICENSE "$staging\LICENSE.txt"
           $sourceDir = (Resolve-Path $staging).Path
           $iscc = (Get-Command iscc.exe -ErrorAction Stop).Source
           & $iscc "/DAppVersion=$releaseVersion" "/DSourceDir=$sourceDir" "/Orelease" .\packaging\windows\netquota.iss
           if ($LASTEXITCODE -ne 0) {
             exit $LASTEXITCODE
           }
+
+          if ($hasCertificate) {
+            $installer = "release\netquota-windows-amd64-setup.exe"
+            Sign-Binary $installer
+            Verify-Binary $installer
+            Write-Host "Windows installer was Authenticode-signed."
+          }
+
+          Remove-Item -LiteralPath "$staging\LICENSE.txt" -Force
+          Compress-Archive -Path "$staging\*" -DestinationPath "netquota-windows-amd64.zip" -Force
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v6
