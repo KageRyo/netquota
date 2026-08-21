@@ -50,7 +50,7 @@ jobs:
         shell: bash
         run: |
           go run ./tools/iconassets
-          git diff --exit-code -- assets/icon-256.png assets/windows/icon.ico
+          git diff --exit-code -- assets/icon-256.png
 
       - name: Run vet
         run: go vet ./...

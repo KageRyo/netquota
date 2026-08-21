@@ -1,12 +1,11 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
   <title>NetQuota icon</title>
-  <desc>Daily network quota ring with upload and download arrows.</desc>
-  <rect x="92" y="92" width="840" height="840" rx="220" fill="#0F172A"/>
+  <desc>Daily network quota ring with upload and download arrows on a transparent background.</desc>
   <path d="M 276.81 709.34 A 307 307 0 1 1 814.36 458.69"
         fill="none" stroke="#38BDF8" stroke-width="86" stroke-linecap="round"/>
   <path d="M 814.36 458.69 A 307 307 0 0 1 729.08 729.08"
         fill="none" stroke="#F59E0B" stroke-width="86" stroke-linecap="round"/>
-  <g fill="#F8FAFC">
+  <g fill="#0F172A">
     <rect x="379" y="350" width="78" height="242" rx="39"/>
     <path d="M306 560 H530 L418 690 Z"/>
     <rect x="567" y="432" width="78" height="242" rx="39"/>

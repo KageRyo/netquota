@@ -7,6 +7,9 @@
 *.so
 *.dylib
 
+# Generated packaging assets
+/assets/windows/icon.ico
+
 # Go tooling
 /.cache/
 coverage.out
