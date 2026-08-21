@@ -13,9 +13,9 @@ import (
 )
 
 const (
-	latestReleaseEndpoint = "https://api.github.com/repos/KageRyo/netquota/releases/latest"
-	installerAssetName    = "netquota-windows-amd64-setup.exe"
-	maxResponseBytes      = 1 << 20
+	publicReleasesEndpoint = "https://api.github.com/repos/KageRyo/netquota/releases"
+	installerAssetName     = "netquota-windows-amd64-setup.exe"
+	maxResponseBytes       = 1 << 20
 )
 
 var ErrInvalidVersion = errors.New("invalid semantic version")
@@ -32,9 +32,11 @@ type Release struct {
 }
 
 type apiRelease struct {
-	TagName string     `json:"tag_name"`
-	HTMLURL string     `json:"html_url"`
-	Assets  []apiAsset `json:"assets"`
+	TagName    string     `json:"tag_name"`
+	HTMLURL    string     `json:"html_url"`
+	Draft      bool       `json:"draft"`
+	Prerelease bool       `json:"prerelease"`
+	Assets     []apiAsset `json:"assets"`
 }
 
 type apiAsset struct {
@@ -52,7 +54,7 @@ type semanticVersion struct {
 func NewChecker() Checker {
 	return Checker{
 		Client:   &http.Client{Timeout: 5 * time.Second},
-		Endpoint: latestReleaseEndpoint,
+		Endpoint: publicReleasesEndpoint,
 	}
 }
 
@@ -64,7 +66,7 @@ func (c Checker) Check(ctx context.Context, current string) (Release, bool, erro
 
 	endpoint := c.Endpoint
 	if endpoint == "" {
-		endpoint = latestReleaseEndpoint
+		endpoint = publicReleasesEndpoint
 	}
 	client := c.Client
 	if client == nil {
@@ -80,30 +82,51 @@ func (c Checker) Check(ctx context.Context, current string) (Release, bool, erro
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return Release{}, false, fmt.Errorf("request latest release: %w", err)
+		return Release{}, false, fmt.Errorf("request releases: %w", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode == http.StatusNotFound {
 		return Release{}, false, nil
 	}
 	if resp.StatusCode != http.StatusOK {
-		return Release{}, false, fmt.Errorf("latest release returned HTTP %d", resp.StatusCode)
+		return Release{}, false, fmt.Errorf("releases returned HTTP %d", resp.StatusCode)
 	}
 
-	var payload apiRelease
+	var payload []apiRelease
 	if err := json.NewDecoder(io.LimitReader(resp.Body, maxResponseBytes)).Decode(&payload); err != nil {
-		return Release{}, false, fmt.Errorf("decode latest release: %w", err)
+		return Release{}, false, fmt.Errorf("decode releases: %w", err)
 	}
-	latestVersion, err := parseVersion(payload.TagName)
-	if err != nil {
-		return Release{}, false, fmt.Errorf("latest release tag: %w", err)
+
+	var selected apiRelease
+	var selectedVersion semanticVersion
+	found := false
+	for _, candidate := range payload {
+		if candidate.Draft {
+			continue
+		}
+		candidateVersion, err := parseVersion(candidate.TagName)
+		if err != nil {
+			continue
+		}
+		candidateIsPrerelease := candidate.Prerelease || len(candidateVersion.PreRelease) > 0
+		if len(currentVersion.PreRelease) == 0 && candidateIsPrerelease {
+			continue
+		}
+		if compareVersions(candidateVersion, currentVersion) <= 0 {
+			continue
+		}
+		if !found || compareVersions(candidateVersion, selectedVersion) > 0 {
+			selected = candidate
+			selectedVersion = candidateVersion
+			found = true
+		}
 	}
-	if compareVersions(latestVersion, currentVersion) <= 0 {
+	if !found {
 		return Release{}, false, nil
 	}
 
-	release := Release{TagName: payload.TagName, PageURL: payload.HTMLURL}
-	for _, asset := range payload.Assets {
+	release := Release{TagName: selected.TagName, PageURL: selected.HTMLURL}
+	for _, asset := range selected.Assets {
 		if asset.Name == installerAssetName {
 			release.InstallerURL = asset.DownloadURL
 			break

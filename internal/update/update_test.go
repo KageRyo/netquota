@@ -13,11 +13,13 @@ func TestCheckReportsNewerReleaseAndInstaller(t *testing.T) {
 			t.Fatalf("Accept header = %q, want %q", got, want)
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{
-            "tag_name": "v0.2.0",
-            "html_url": "https://github.com/KageRyo/netquota/releases/tag/v0.2.0",
-            "assets": [{"name": "netquota-windows-amd64-setup.exe", "browser_download_url": "https://example.test/setup.exe"}]
-        }`))
+		_, _ = w.Write([]byte(`[
+            {
+                "tag_name": "v0.2.0",
+                "html_url": "https://github.com/KageRyo/netquota/releases/tag/v0.2.0",
+                "assets": [{"name": "netquota-windows-amd64-setup.exe", "browser_download_url": "https://example.test/setup.exe"}]
+            }
+        ]`))
 	}))
 	defer server.Close()
 
@@ -35,7 +37,7 @@ func TestCheckReportsNewerReleaseAndInstaller(t *testing.T) {
 
 func TestCheckReportsStableReleaseForAlphaBuild(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte(`{"tag_name":"v0.1.0","html_url":"https://example.test/release"}`))
+		_, _ = w.Write([]byte(`[{"tag_name":"v0.1.0","html_url":"https://example.test/release"}]`))
 	}))
 	defer server.Close()
 
@@ -50,7 +52,7 @@ func TestCheckReportsStableReleaseForAlphaBuild(t *testing.T) {
 
 func TestCheckIgnoresOlderRelease(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte(`{"tag_name":"v0.1.0","html_url":"https://example.test/release"}`))
+		_, _ = w.Write([]byte(`[{"tag_name":"v0.1.0","html_url":"https://example.test/release"}]`))
 	}))
 	defer server.Close()
 
@@ -78,15 +80,70 @@ func TestCheckTreatsNoPublishedReleaseAsUpToDate(t *testing.T) {
 	}
 }
 
-func TestCheckRejectsMalformedReleaseTag(t *testing.T) {
+func TestCheckIgnoresMalformedReleaseTag(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte(`{"tag_name":"nightly","html_url":"https://example.test/release"}`))
+		_, _ = w.Write([]byte(`[{"tag_name":"nightly","html_url":"https://example.test/release"}]`))
 	}))
 	defer server.Close()
 
-	_, _, err := (Checker{Client: server.Client(), Endpoint: server.URL}).Check(context.Background(), "0.1.0")
-	if err == nil {
-		t.Fatal("expected malformed release tag error")
+	_, available, err := (Checker{Client: server.Client(), Endpoint: server.URL}).Check(context.Background(), "0.1.0")
+	if err != nil {
+		t.Fatalf("Check: %v", err)
+	}
+	if available {
+		t.Fatal("malformed release tags must not be offered as updates")
+	}
+}
+
+func TestCheckFindsNewerPrereleaseForAlphaBuild(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`[
+            {"tag_name":"v0.1.0-alpha.2","html_url":"https://example.test/alpha.2","prerelease":true},
+            {"tag_name":"v0.1.0-beta.1","html_url":"https://example.test/beta.1","prerelease":true}
+        ]`))
+	}))
+	defer server.Close()
+
+	release, available, err := (Checker{Client: server.Client(), Endpoint: server.URL}).Check(context.Background(), "v0.1.0-alpha.1")
+	if err != nil {
+		t.Fatalf("Check: %v", err)
+	}
+	if !available || release.TagName != "v0.1.0-beta.1" {
+		t.Fatalf("release = %+v, available = %v", release, available)
+	}
+}
+
+func TestCheckDoesNotOfferPrereleaseToStableBuild(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`[
+            {"tag_name":"v0.2.0-alpha.1","html_url":"https://example.test/alpha.1","prerelease":true}
+        ]`))
+	}))
+	defer server.Close()
+
+	_, available, err := (Checker{Client: server.Client(), Endpoint: server.URL}).Check(context.Background(), "v0.1.0")
+	if err != nil {
+		t.Fatalf("Check: %v", err)
+	}
+	if available {
+		t.Fatal("stable builds must not receive prerelease updates")
+	}
+}
+
+func TestCheckIgnoresDraftReleases(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`[
+            {"tag_name":"v0.2.0","html_url":"https://example.test/draft","draft":true}
+        ]`))
+	}))
+	defer server.Close()
+
+	_, available, err := (Checker{Client: server.Client(), Endpoint: server.URL}).Check(context.Background(), "v0.1.0")
+	if err != nil {
+		t.Fatalf("Check: %v", err)
+	}
+	if available {
+		t.Fatal("draft releases must not be offered as updates")
 	}
 }
 
