@@ -161,7 +161,7 @@ network provider → usage tracker → quota evaluator
                          └──────→ CLI / system tray
 ```
 
-The application embeds the canonical assets from [`assets/`](assets/): the SVG is used for the application and window identity, while the 16px PNG is used for system-tray, desktop notification, and Fyne packaging surfaces. [`FyneApp.toml`](FyneApp.toml) points packaging tools at the PNG-compatible variant.
+The application embeds the canonical assets from [`assets/`](assets/): the SVG is used for the application and window identity, while the 16px PNG is used for system-tray and desktop notification surfaces. The generated 256px PNG and multi-size Windows ICO are used by packaging tools; [`FyneApp.toml`](FyneApp.toml) points to the high-resolution PNG.
 
 Run the same checks used by CI:
 

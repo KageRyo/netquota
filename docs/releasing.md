@@ -12,7 +12,9 @@ From WSL, start the manual workflow:
 gh workflow run draft-release.yml --ref main -f tag=v0.1.0-alpha.1
 ```
 
-The workflow runs checks on `windows-latest`, builds the GUI and console binaries, creates the portable zip, and creates or updates a GitHub draft release with the Windows installer. The maintainer should install the draft installer on a real Windows machine and verify startup, tray behavior, update behavior, and uninstall before publishing the release.
+The workflow runs checks on `windows-latest`, embeds the generated Windows ICO into the GUI executable with `go-winres`, builds the GUI and console binaries, creates the portable zip, and creates or updates a GitHub draft release with the Windows installer. The maintainer should install the draft installer on a real Windows machine and verify startup, tray behavior, update behavior, and uninstall before publishing the release.
+
+The Windows GUI executable, installer, Start Menu shortcut, optional desktop shortcut, and uninstaller all use the generated `assets/windows/icon.ico`. The ICO is regenerated from `assets/icon.svg` by `make icons`; CI fails if the committed derived files are stale.
 
 The installer shows the repository's `LICENSE` file and requires the user to accept it before continuing. This is an installer consent step; the project remains available under the MIT License.
 
@@ -57,6 +59,7 @@ Do not publish a draft until the Windows real-machine checks are complete. A rel
 
 - the installer displays the MIT License and blocks continuation until it is accepted;
 - the GUI starts without a console window;
+- the GUI executable, installer, and shortcuts display the NetQuota icon;
 - the tray menu shows total, download, and upload usage;
 - the installer and portable package contain the same release version;
 - the application can be uninstalled cleanly; and

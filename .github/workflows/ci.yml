@@ -46,11 +46,48 @@ jobs:
             exit 1
           fi
 
+      - name: Verify generated icon assets
+        shell: bash
+        run: |
+          go run ./tools/iconassets
+          git diff --exit-code -- assets/icon-256.png assets/windows/icon.ico
+
       - name: Run vet
         run: go vet ./...
 
       - name: Run unit tests
         run: go test ./...
 
+      - name: Prepare Windows icon resource
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          go install github.com/tc-hib/go-winres@v0.3.3
+          $goBin = go env GOBIN
+          if ([string]::IsNullOrWhiteSpace($goBin)) {
+            $goBin = Join-Path (go env GOPATH) "bin"
+          }
+          $env:Path = "$goBin;$env:Path"
+          $resourcePrefix = "cmd\netquota\netquota"
+          go-winres simply `
+            --arch amd64 `
+            --out $resourcePrefix `
+            --icon assets\windows\icon.ico `
+            --manifest gui `
+            --file-version 0.0.0.0 `
+            --product-version 0.0.0.0 `
+            --file-description "NetQuota" `
+            --product-name "NetQuota" `
+            --original-filename "netquota.exe"
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
+
       - name: Build application
         run: go build -trimpath ./cmd/netquota
+
+      - name: Clean Windows icon resource
+        if: always() && runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Remove-Item -LiteralPath "cmd\netquota\netquota_windows_amd64.syso" -Force -ErrorAction SilentlyContinue

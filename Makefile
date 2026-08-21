@@ -1,4 +1,4 @@
-.PHONY: fmt vet test build check
+.PHONY: fmt vet test build icons check
 
 fmt:
 	gofmt -w .
@@ -12,5 +12,8 @@ test:
 build:
 	mkdir -p bin
 	go build -trimpath -o bin/netquota ./cmd/netquota
+
+icons:
+	go run ./tools/iconassets
 
 check: vet test build

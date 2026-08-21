@@ -44,6 +44,12 @@ jobs:
       - name: Run unit tests
         run: go test ./...
 
+      - name: Verify generated icon assets
+        shell: pwsh
+        run: |
+          go run .\tools\iconassets
+          git diff --exit-code -- assets/icon-256.png assets/windows/icon.ico
+
       - name: Build Windows package
         shell: pwsh
         env:
@@ -74,7 +80,38 @@ jobs:
           New-Item -ItemType Directory -Force $staging | Out-Null
           $guiLdflags = "-H=windowsgui -s -w $versionLdflag"
           $consoleLdflags = "-s -w $versionLdflag"
+
+          go install github.com/tc-hib/go-winres@v0.3.3
+          $goBin = go env GOBIN
+          if ([string]::IsNullOrWhiteSpace($goBin)) {
+            $goBin = Join-Path (go env GOPATH) "bin"
+          }
+          $env:Path = "$goBin;$env:Path"
+          $resourcePrefix = "cmd\netquota\netquota"
+          $resourceFile = "${resourcePrefix}_windows_amd64.syso"
+          go-winres simply `
+            --arch amd64 `
+            --out $resourcePrefix `
+            --icon assets\windows\icon.ico `
+            --manifest gui `
+            --file-version "${releaseCoreVersion}.0" `
+            --product-version "${releaseCoreVersion}.0" `
+            --file-description "NetQuota" `
+            --product-name "NetQuota" `
+            --original-filename "netquota.exe"
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
+          if (-not (Test-Path -LiteralPath $resourceFile)) {
+            throw "go-winres did not produce $resourceFile"
+          }
+
           go build -trimpath -tags migrated_fynedo -ldflags $guiLdflags -o "$staging\netquota.exe" .\cmd\netquota
+          if ($LASTEXITCODE -ne 0) {
+            Remove-Item -LiteralPath $resourceFile -Force -ErrorAction SilentlyContinue
+            exit $LASTEXITCODE
+          }
+          Remove-Item -LiteralPath $resourceFile -Force
           go build -trimpath -tags migrated_fynedo -ldflags $consoleLdflags -o "$staging\netquota-console.exe" .\cmd\netquota
 
           $hasCertificate = -not [string]::IsNullOrWhiteSpace($env:WINDOWS_SIGNING_CERTIFICATE_BASE64)
@@ -153,7 +190,7 @@ jobs:
             Write-Host "No Windows signing certificate configured; building unsigned artifacts."
           }
 
-          Copy-Item README.md, LICENSE, PRIVACY.md $staging
+          Copy-Item README.md, LICENSE, PRIVACY.md, assets\windows\icon.ico $staging
           Copy-Item LICENSE "$staging\LICENSE.txt"
           $sourceDir = (Resolve-Path $staging).Path
           $iscc = (Get-Command iscc.exe -ErrorAction Stop).Source
