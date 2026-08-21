@@ -1,0 +1,104 @@
+name: Draft release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to create or update
+        required: true
+        default: v0.1.0
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    name: Build Windows release
+    runs-on: windows-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.ref }}
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Check formatting
+        shell: pwsh
+        run: |
+          $files = gofmt -l .
+          if ($files) {
+            Write-Host "gofmt would change:"
+            $files
+            exit 1
+          }
+
+      - name: Run vet
+        run: go vet ./...
+
+      - name: Run unit tests
+        run: go test ./...
+
+      - name: Build Windows package
+        shell: pwsh
+        run: |
+          $staging = "release\netquota-windows-amd64"
+          New-Item -ItemType Directory -Force $staging | Out-Null
+          go build -trimpath -o "$staging\netquota.exe" .\cmd\netquota
+          Copy-Item README.md, LICENSE $staging
+          Compress-Archive -Path "$staging\*" -DestinationPath "netquota-windows-amd64.zip" -Force
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: netquota-windows-amd64
+          path: netquota-windows-amd64.zip
+          if-no-files-found: error
+
+  create-draft-release:
+    name: Create draft release
+    needs: build-windows
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download Windows package
+        uses: actions/download-artifact@v4
+        with:
+          name: netquota-windows-amd64
+          path: dist
+
+      - name: Create or update draft release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ inputs.tag }}
+          RELEASE_TARGET: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          if [[ ! "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "tag must use the form vX.Y.Z" >&2
+            exit 1
+          fi
+
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            is_draft="$(gh release view "$RELEASE_TAG" --json isDraft --jq '.isDraft')"
+            if [[ "$is_draft" != "true" ]]; then
+              echo "refusing to modify a published release: $RELEASE_TAG" >&2
+              exit 1
+            fi
+            gh release upload "$RELEASE_TAG" dist/netquota-windows-amd64.zip --clobber
+          else
+            gh release create "$RELEASE_TAG" dist/netquota-windows-amd64.zip \
+              --draft \
+              --target "$RELEASE_TARGET" \
+              --title "NetQuota $RELEASE_TAG" \
+              --generate-notes
+          fi
+
+          gh release view "$RELEASE_TAG" --json url,isDraft,tagName
