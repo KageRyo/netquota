@@ -73,9 +73,9 @@ func TestReadSettingsKeepsInterfaceIdentity(t *testing.T) {
 func TestTrayMenuLeavesQuitToFyne(t *testing.T) {
 	t.Parallel()
 
-	tray := newTrayMenu(nil, func() {})
-	if len(tray.menu.Items) != 6 {
-		t.Fatalf("tray menu item count = %d, want 6", len(tray.menu.Items))
+	tray := newTrayMenu(nil, func() {}, func() {})
+	if len(tray.menu.Items) != 7 {
+		t.Fatalf("tray menu item count = %d, want 7", len(tray.menu.Items))
 	}
 	for _, item := range []*struct {
 		item *fyne.MenuItem
@@ -101,6 +101,9 @@ func TestTrayMenuLeavesQuitToFyne(t *testing.T) {
 	if got, want := tray.menu.Items[5].Label, "Settings"; got != want {
 		t.Fatalf("settings item = %q, want %q", got, want)
 	}
+	if got, want := tray.menu.Items[6].Label, "Check for updates"; got != want {
+		t.Fatalf("update item = %q, want %q", got, want)
+	}
 	for _, item := range tray.menu.Items {
 		if item.IsQuit {
 			t.Fatalf("tray item %q should not be an app-provided quit item", item.Label)
@@ -111,7 +114,7 @@ func TestTrayMenuLeavesQuitToFyne(t *testing.T) {
 func TestTrayMenuUpdatesUsage(t *testing.T) {
 	fyneTest.NewApp()
 
-	tray := newTrayMenu(nil, func() {})
+	tray := newTrayMenu(nil, func() {}, func() {})
 	tray.update(quota.Status{
 		Total: quota.MetricStatus{
 			UsedBytes:  1536,
@@ -131,6 +134,30 @@ func TestTrayMenuUpdatesUsage(t *testing.T) {
 	}
 	if got, want := tray.uploadItem.Label, "Upload: 512 B (limit disabled)"; got != want {
 		t.Fatalf("upload item = %q, want %q", got, want)
+	}
+}
+
+func TestTrayMenuShowsAvailableUpdate(t *testing.T) {
+	fyneTest.NewApp()
+
+	opened := false
+	tray := newTrayMenu(nil, func() {}, func() {})
+	tray.setUpdateAvailable("v0.2.0", func() { opened = true })
+
+	if got, want := tray.updateItem.Label, "Update available: v0.2.0"; got != want {
+		t.Fatalf("update item = %q, want %q", got, want)
+	}
+	if tray.updateItem.Disabled {
+		t.Fatal("available update should be actionable")
+	}
+	tray.updateItem.Action()
+	if !opened {
+		t.Fatal("available update action was not invoked")
+	}
+
+	tray.setChecking()
+	if !tray.updateItem.Disabled || tray.updateItem.Action != nil {
+		t.Fatal("checking state should disable the update item")
 	}
 }
 

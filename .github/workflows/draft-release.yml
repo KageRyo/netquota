@@ -46,19 +46,42 @@ jobs:
 
       - name: Build Windows package
         shell: pwsh
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
         run: |
+          if ($env:RELEASE_TAG -notmatch '^v[0-9]+\.[0-9]+\.[0-9]+$') {
+            Write-Error "tag must use the form vX.Y.Z"
+            exit 1
+          }
+          $releaseVersion = $env:RELEASE_TAG.Substring(1)
+          $versionLdflag = "-X=github.com/KageRyo/netquota/internal/version.Value=$releaseVersion"
           $staging = "release\netquota-windows-amd64"
           New-Item -ItemType Directory -Force $staging | Out-Null
-          go build -trimpath -tags migrated_fynedo -ldflags='-H=windowsgui -s -w' -o "$staging\netquota.exe" .\cmd\netquota
-          go build -trimpath -tags migrated_fynedo -ldflags='-s -w' -o "$staging\netquota-console.exe" .\cmd\netquota
+          $guiLdflags = "-H=windowsgui -s -w $versionLdflag"
+          $consoleLdflags = "-s -w $versionLdflag"
+          go build -trimpath -tags migrated_fynedo -ldflags $guiLdflags -o "$staging\netquota.exe" .\cmd\netquota
+          go build -trimpath -tags migrated_fynedo -ldflags $consoleLdflags -o "$staging\netquota-console.exe" .\cmd\netquota
           Copy-Item README.md, LICENSE $staging
           Compress-Archive -Path "$staging\*" -DestinationPath "netquota-windows-amd64.zip" -Force
+          $sourceDir = (Resolve-Path $staging).Path
+          $iscc = (Get-Command iscc.exe -ErrorAction Stop).Source
+          & $iscc "/DAppVersion=$releaseVersion" "/DSourceDir=$sourceDir" "/Orelease" .\packaging\windows\netquota.iss
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v6
         with:
           name: netquota-windows-amd64
           path: netquota-windows-amd64.zip
+          if-no-files-found: error
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: netquota-windows-amd64-installer
+          path: release/netquota-windows-amd64-setup.exe
           if-no-files-found: error
 
   create-draft-release:
@@ -70,6 +93,12 @@ jobs:
         uses: actions/download-artifact@v7
         with:
           name: netquota-windows-amd64
+          path: dist
+
+      - name: Download Windows installer
+        uses: actions/download-artifact@v7
+        with:
+          name: netquota-windows-amd64-installer
           path: dist
 
       - name: Create or update draft release
@@ -94,9 +123,14 @@ jobs:
               exit 1
             fi
             gh release edit "$RELEASE_TAG" --draft --target "$RELEASE_TARGET"
-            gh release upload "$RELEASE_TAG" dist/netquota-windows-amd64.zip --clobber
+            gh release upload "$RELEASE_TAG" \
+              dist/netquota-windows-amd64.zip \
+              dist/netquota-windows-amd64-setup.exe \
+              --clobber
           else
-            gh release create "$RELEASE_TAG" dist/netquota-windows-amd64.zip \
+            gh release create "$RELEASE_TAG" \
+              dist/netquota-windows-amd64.zip \
+              dist/netquota-windows-amd64-setup.exe \
               --draft \
               --target "$RELEASE_TARGET" \
               --title "NetQuota $RELEASE_TAG" \

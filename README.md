@@ -70,12 +70,16 @@ WSL can run the tests and trigger the Windows build, but it cannot run the Windo
 gh workflow run draft-release.yml --ref main -f tag=v0.1.0
 ```
 
-The workflow runs formatting, vet, and unit tests on `windows-latest`, builds `netquota-windows-amd64.zip`, and attaches it to a GitHub draft release. The archive contains two portable binaries:
+The workflow runs formatting, vet, and unit tests on `windows-latest`, builds both a portable package and an installer, and attaches them to a GitHub draft release. The portable archive contains two binaries:
 
 - `netquota.exe` is the tray application built with the Windows GUI subsystem, so launching it does not open a console window.
 - `netquota-console.exe` is the console-enabled build for `--version`, `--list-interfaces`, `--once`, `--headless`, and diagnostics.
 
-Extract the archive and run `netquota.exe` on a Windows machine. This draft artifact is portable, not an installer: it does not create an Add/Remove Programs entry or provide an uninstaller. The Settings page's start-on-login option only registers the selected executable to launch with the user session; it is separate from installation. A draft is not published until a maintainer explicitly publishes it.
+Extract the archive and run `netquota.exe` on a Windows machine for the portable option. The `netquota-windows-amd64-setup.exe` installer installs the same two binaries for the current Windows user, creates a Start Menu shortcut, and registers an uninstaller. The Settings page's start-on-login option only registers the selected executable to launch with the user session; it is separate from installation.
+
+Both Windows distributions check the latest published GitHub release in the background. When a newer version is available, the tray menu shows `Update available: vX.Y.Z`; selecting it opens the installer download, or the release page if an installer asset is unavailable. Updates are user-confirmed rather than silently replacing a running executable. A draft release is not considered an update until a maintainer publishes it.
+
+A draft is not published until a maintainer explicitly publishes it.
 
 ## Configuration
 

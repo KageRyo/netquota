@@ -11,5 +11,6 @@ This project follows Keep a Changelog and semantic versioning.
 - local JSON configuration and atomic daily state persistence
 - local-date rollover and operating-system counter reset handling
 - desktop notifications and a Fyne system tray UI
+- Windows portable zip and per-user installer packages with published-release update checks
 - CLI, headless monitoring, interface listing, and start-on-login commands
 - unit tests and GitHub Actions checks for Windows and Linux

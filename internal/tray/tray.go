@@ -3,7 +3,9 @@ package tray
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	"fyne.io/fyne/v2"
@@ -21,6 +23,7 @@ import (
 	"github.com/KageRyo/netquota/internal/network"
 	"github.com/KageRyo/netquota/internal/quota"
 	"github.com/KageRyo/netquota/internal/startup"
+	updateapp "github.com/KageRyo/netquota/internal/update"
 	"github.com/KageRyo/netquota/internal/version"
 )
 
@@ -34,7 +37,7 @@ func Run(ctx context.Context, monitor *monitorapp.Monitor, executable string) {
 	window.SetCloseIntercept(window.Hide)
 
 	if desktopApp, ok := application.(desktop.App); ok {
-		trayMenu := newTrayMenu(window, ui.showSettings)
+		trayMenu := newTrayMenu(window, ui.showSettings, ui.checkForUpdates)
 		ui.trayMenu = trayMenu
 		desktopApp.SetSystemTrayMenu(trayMenu.menu)
 		desktopApp.SetSystemTrayWindow(window)
@@ -43,6 +46,9 @@ func Run(ctx context.Context, monitor *monitorapp.Monitor, executable string) {
 	pollContext, cancel := context.WithCancel(ctx)
 	application.Lifecycle().SetOnStopped(cancel)
 	go ui.poll(pollContext)
+	if ui.trayMenu != nil {
+		go ui.checkForUpdatesInBackground(pollContext)
+	}
 	go func() {
 		<-pollContext.Done()
 		fyne.Do(func() {
@@ -59,12 +65,14 @@ type trayMenu struct {
 	totalItem    *fyne.MenuItem
 	downloadItem *fyne.MenuItem
 	uploadItem   *fyne.MenuItem
+	updateItem   *fyne.MenuItem
 }
 
-func newTrayMenu(window fyne.Window, showSettings func()) *trayMenu {
+func newTrayMenu(window fyne.Window, showSettings, checkForUpdates func()) *trayMenu {
 	totalItem := newTrayMetricItem("Total")
 	downloadItem := newTrayMetricItem("Download")
 	uploadItem := newTrayMetricItem("Upload")
+	updateItem := fyne.NewMenuItem("Check for updates", checkForUpdates)
 	menu := fyne.NewMenu("NetQuota",
 		totalItem,
 		downloadItem,
@@ -74,12 +82,14 @@ func newTrayMenu(window fyne.Window, showSettings func()) *trayMenu {
 			window.Show()
 		}),
 		fyne.NewMenuItem("Settings", showSettings),
+		updateItem,
 	)
 	return &trayMenu{
 		menu:         menu,
 		totalItem:    totalItem,
 		downloadItem: downloadItem,
 		uploadItem:   uploadItem,
+		updateItem:   updateItem,
 	}
 }
 
@@ -93,6 +103,27 @@ func (m *trayMenu) update(status quota.Status) {
 	m.totalItem.Label = metricText("Total", status.Total.UsedBytes, status.Total)
 	m.downloadItem.Label = metricText("Download", status.Download.UsedBytes, status.Download)
 	m.uploadItem.Label = metricText("Upload", status.Upload.UsedBytes, status.Upload)
+	m.menu.Refresh()
+}
+
+func (m *trayMenu) setChecking() {
+	m.updateItem.Label = "Checking for updates…"
+	m.updateItem.Action = nil
+	m.updateItem.Disabled = true
+	m.menu.Refresh()
+}
+
+func (m *trayMenu) setReady(checkForUpdates func()) {
+	m.updateItem.Label = "Check for updates"
+	m.updateItem.Action = checkForUpdates
+	m.updateItem.Disabled = false
+	m.menu.Refresh()
+}
+
+func (m *trayMenu) setUpdateAvailable(tag string, openRelease func()) {
+	m.updateItem.Label = "Update available: " + tag
+	m.updateItem.Action = openRelease
+	m.updateItem.Disabled = false
 	m.menu.Refresh()
 }
 
@@ -110,6 +141,7 @@ type ui struct {
 	totalLabel     *widget.Label
 	remainingLabel *widget.Label
 	trayMenu       *trayMenu
+	updateChecker  updateapp.Checker
 }
 
 func newUI(application fyne.App, window fyne.Window, monitor *monitorapp.Monitor, executable string) *ui {
@@ -125,6 +157,7 @@ func newUI(application fyne.App, window fyne.Window, monitor *monitorapp.Monitor
 		uploadLabel:    widget.NewLabel("Upload: —"),
 		totalLabel:     widget.NewLabel("Total: —"),
 		remainingLabel: widget.NewLabel("Remaining: —"),
+		updateChecker:  updateapp.NewChecker(),
 	}
 }
 
@@ -192,6 +225,71 @@ func (u *ui) sample(ctx context.Context) {
 			u.trayMenu.update(sample.Quota)
 		}
 	})
+}
+
+func (u *ui) checkForUpdates() {
+	u.startUpdateCheck(context.Background(), true)
+}
+
+func (u *ui) checkForUpdatesInBackground(ctx context.Context) {
+	u.startUpdateCheck(ctx, false)
+}
+
+func (u *ui) startUpdateCheck(ctx context.Context, interactive bool) {
+	if u.trayMenu == nil {
+		return
+	}
+	fyne.Do(func() {
+		if u.trayMenu != nil {
+			u.trayMenu.setChecking()
+		}
+	})
+	go func() {
+		release, available, err := u.updateChecker.Check(ctx, version.Value)
+		fyne.Do(func() {
+			if u.trayMenu == nil {
+				return
+			}
+			if err != nil {
+				u.trayMenu.setReady(u.checkForUpdates)
+				if interactive {
+					dialog.ShowError(fmt.Errorf("check for updates: %w", err), u.window)
+				}
+				return
+			}
+			if !available {
+				u.trayMenu.setReady(u.checkForUpdates)
+				if interactive {
+					dialog.ShowInformation("NetQuota is up to date", "You are running NetQuota v"+version.Value+".", u.window)
+				}
+				return
+			}
+			u.trayMenu.setUpdateAvailable(release.TagName, func() {
+				u.openRelease(release)
+			})
+			if interactive {
+				dialog.ShowInformation("NetQuota update available", "NetQuota "+release.TagName+" is ready to download.", u.window)
+			}
+		})
+	}()
+}
+
+func (u *ui) openRelease(release updateapp.Release) {
+	target := release.InstallerURL
+	if target == "" {
+		target = release.PageURL
+	}
+	parsed, err := url.Parse(target)
+	if err != nil || parsed.Scheme != "https" || !strings.EqualFold(parsed.Host, "github.com") {
+		if err == nil {
+			err = fmt.Errorf("unexpected release URL %q", target)
+		}
+		dialog.ShowError(fmt.Errorf("open update: %w", err), u.window)
+		return
+	}
+	if err := u.application.OpenURL(parsed); err != nil {
+		dialog.ShowError(fmt.Errorf("open update: %w", err), u.window)
+	}
 }
 
 func (u *ui) showSettings() {

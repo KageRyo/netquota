@@ -26,6 +26,7 @@ gopsutil interface counters
 - internal/storage writes versioned JSON through a temporary file and rename.
 - internal/app coordinates sampling, state persistence, and notifications without knowing about Fyne widgets.
 - internal/tray is a presentation layer for the monitor and settings.
+- internal/update checks public GitHub release metadata for optional update prompts; it does not participate in accounting.
 - cmd/netquota selects tray, headless, and inspection modes.
 
 ## State invariants
