@@ -113,7 +113,7 @@ current counter - previous counter = sample delta
 daily download/upload total + sample delta = current usage
 ```
 
-The first sample establishes a baseline and does not count traffic that occurred before NetQuota started. If an operating-system counter becomes smaller than the previous value, NetQuota treats it as a reset and does not add a negative delta. When the local calendar date changes, the next sample starts a new daily baseline, so sleep and hibernation do not depend on a timer firing at midnight.
+When no valid baseline exists for the current day, the first sample establishes one. Traffic that occurred before that baseline cannot be reconstructed. If an operating-system counter becomes smaller than the previous value, NetQuota treats it as a reset and does not add a negative delta. When the local calendar date changes, the next sample starts a new daily baseline, so sleep and hibernation do not depend on a timer firing at midnight.
 
 ## Important limitation
 
