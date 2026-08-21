@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -14,7 +15,8 @@ import (
 
 const (
 	publicReleasesEndpoint = "https://api.github.com/repos/KageRyo/netquota/releases"
-	installerAssetName     = "netquota-windows-amd64-setup.exe"
+	windowsInstallerAsset  = "netquota-windows-amd64-setup.exe"
+	linuxPackageAsset      = "netquota-linux-amd64.tar.gz"
 	maxResponseBytes       = 1 << 20
 )
 
@@ -26,9 +28,9 @@ type Checker struct {
 }
 
 type Release struct {
-	TagName      string
-	PageURL      string
-	InstallerURL string
+	TagName     string
+	PageURL     string
+	DownloadURL string
 }
 
 type apiRelease struct {
@@ -126,13 +128,27 @@ func (c Checker) Check(ctx context.Context, current string) (Release, bool, erro
 	}
 
 	release := Release{TagName: selected.TagName, PageURL: selected.HTMLURL}
-	for _, asset := range selected.Assets {
-		if asset.Name == installerAssetName {
-			release.InstallerURL = asset.DownloadURL
-			break
+	assetName := platformAssetName(runtime.GOOS, runtime.GOARCH)
+	if assetName != "" {
+		for _, asset := range selected.Assets {
+			if asset.Name == assetName {
+				release.DownloadURL = asset.DownloadURL
+				break
+			}
 		}
 	}
 	return release, true, nil
+}
+
+func platformAssetName(goos, goarch string) string {
+	switch {
+	case goos == "windows" && goarch == "amd64":
+		return windowsInstallerAsset
+	case goos == "linux" && goarch == "amd64":
+		return linuxPackageAsset
+	default:
+		return ""
+	}
 }
 
 func parseVersion(value string) (semanticVersion, error) {

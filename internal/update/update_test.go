@@ -4,10 +4,11 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"runtime"
 	"testing"
 )
 
-func TestCheckReportsNewerReleaseAndInstaller(t *testing.T) {
+func TestCheckReportsNewerReleaseAndPlatformDownload(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if got, want := r.Header.Get("Accept"), "application/vnd.github+json"; got != want {
 			t.Fatalf("Accept header = %q, want %q", got, want)
@@ -17,7 +18,10 @@ func TestCheckReportsNewerReleaseAndInstaller(t *testing.T) {
             {
                 "tag_name": "v0.2.0",
                 "html_url": "https://github.com/KageRyo/netquota/releases/tag/v0.2.0",
-                "assets": [{"name": "netquota-windows-amd64-setup.exe", "browser_download_url": "https://example.test/setup.exe"}]
+                "assets": [
+                    {"name": "netquota-windows-amd64-setup.exe", "browser_download_url": "https://example.test/setup.exe"},
+                    {"name": "netquota-linux-amd64.tar.gz", "browser_download_url": "https://example.test/netquota.tar.gz"}
+                ]
             }
         ]`))
 	}))
@@ -30,8 +34,36 @@ func TestCheckReportsNewerReleaseAndInstaller(t *testing.T) {
 	if !available {
 		t.Fatal("expected an available update")
 	}
-	if release.TagName != "v0.2.0" || release.InstallerURL != "https://example.test/setup.exe" {
-		t.Fatalf("release = %+v", release)
+	wantURL := ""
+	switch platformAssetName(runtime.GOOS, runtime.GOARCH) {
+	case windowsInstallerAsset:
+		wantURL = "https://example.test/setup.exe"
+	case linuxPackageAsset:
+		wantURL = "https://example.test/netquota.tar.gz"
+	}
+	if release.TagName != "v0.2.0" || release.DownloadURL != wantURL {
+		t.Fatalf("release = %+v, want download URL %q", release, wantURL)
+	}
+}
+
+func TestPlatformAssetName(t *testing.T) {
+	tests := []struct {
+		name string
+		goos string
+		arch string
+		want string
+	}{
+		{name: "Windows amd64", goos: "windows", arch: "amd64", want: windowsInstallerAsset},
+		{name: "Linux amd64", goos: "linux", arch: "amd64", want: linuxPackageAsset},
+		{name: "Linux arm64", goos: "linux", arch: "arm64"},
+		{name: "Darwin amd64", goos: "darwin", arch: "amd64"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := platformAssetName(test.goos, test.arch); got != test.want {
+				t.Fatalf("platformAssetName(%q, %q) = %q, want %q", test.goos, test.arch, got, test.want)
+			}
+		})
 	}
 }
 

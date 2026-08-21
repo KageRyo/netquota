@@ -277,7 +277,7 @@ func (u *ui) startUpdateCheck(ctx context.Context, interactive bool) {
 }
 
 func (u *ui) openRelease(release updateapp.Release) {
-	target := release.InstallerURL
+	target := release.DownloadURL
 	if target == "" {
 		target = release.PageURL
 	}

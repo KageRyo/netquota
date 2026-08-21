@@ -68,15 +68,19 @@ go build -trimpath -o bin/netquota ./cmd/netquota
 
 The tray window's Settings page lets you select the interface, change each quota in GiB, edit each threshold list, enable notifications, and configure start-on-login.
 
-## Windows draft builds
+## Draft release builds
 
-WSL can run the tests and trigger the Windows build, but it cannot run the Windows system tray UI itself. Maintainers can trigger the manual [`draft-release.yml`](.github/workflows/draft-release.yml) workflow from WSL:
+WSL can run the tests and trigger the release workflow, but it cannot run the Windows system tray UI itself. Maintainers can trigger the manual [`draft-release.yml`](.github/workflows/draft-release.yml) workflow from WSL:
 
 ```sh
 gh workflow run draft-release.yml --ref main -f tag=v0.1.0-alpha.1
 ```
 
-The workflow runs formatting, vet, and unit tests on `windows-latest`, builds both a portable package and an installer, and attaches them to a GitHub draft release. The portable archive contains two binaries:
+The workflow runs formatting, vet, and unit tests on both `windows-latest` and `ubuntu-latest`, then attaches Windows portable/installer artifacts and a Linux portable archive to a GitHub draft release.
+
+### Windows
+
+The Windows portable archive contains two binaries:
 
 - `netquota.exe` is the tray application built with the Windows GUI subsystem, so launching it does not open a console window.
 - `netquota-console.exe` is the console-enabled build for `--version`, `--list-interfaces`, `--once`, `--headless`, and diagnostics.
@@ -84,6 +88,14 @@ The workflow runs formatting, vet, and unit tests on `windows-latest`, builds bo
 Extract the archive and run `netquota.exe` on a Windows machine for the portable option. The `netquota-windows-amd64-setup.exe` installer displays the MIT License and requires acceptance before installing the same two binaries for the current Windows user, creates a Start Menu shortcut, and registers an uninstaller. The Settings page's start-on-login option only registers the selected executable to launch with the user session; it is separate from installation.
 
 Both Windows distributions check published GitHub releases in the background. Stable builds consider stable releases only; alpha, beta, and release-candidate builds can also see newer pre-releases. When a newer version is available, the tray menu shows `Update available: vX.Y.Z`; selecting it opens the installer download, or the release page if an installer asset is unavailable. Updates are user-confirmed rather than silently replacing a running executable. Draft releases are not considered updates until a maintainer publishes them.
+
+### Linux
+
+The Linux artifact is `netquota-linux-amd64.tar.gz`. It contains one GUI/CLI binary named `netquota`, the project documentation, and the high-resolution application icon. The same binary supports the tray UI and CLI modes such as `--version`, `--list-interfaces`, `--once`, and `--headless`.
+
+Install the Linux desktop libraries listed in [Quick start](#quick-start), extract the archive, and run `./netquota`. This is a portable amd64 archive rather than a distro-specific `.deb`, AppImage, or repository package.
+
+Linux builds also check published GitHub releases in the background; when a newer version is available, the tray menu opens the matching Linux archive for download. Updates are user-confirmed rather than silently replacing a running executable.
 
 Windows release artifacts are unsigned unless the repository's signing secrets are configured. See [docs/releasing.md](docs/releasing.md) for the code-signing procedure and the draft-release gate.
 
