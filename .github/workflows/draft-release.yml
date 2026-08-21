@@ -44,6 +44,12 @@ jobs:
       - name: Run unit tests
         run: go test ./...
 
+      - name: Verify generated icon assets
+        shell: pwsh
+        run: |
+          go run .\tools\iconassets
+          git diff --exit-code -- assets/icon-256.png assets/windows/icon.ico
+
       - name: Build Windows package
         shell: pwsh
         env:
@@ -74,7 +80,38 @@ jobs:
           New-Item -ItemType Directory -Force $staging | Out-Null
           $guiLdflags = "-H=windowsgui -s -w $versionLdflag"
           $consoleLdflags = "-s -w $versionLdflag"
+
+          go install github.com/tc-hib/go-winres@v0.3.3
+          $goBin = go env GOBIN
+          if ([string]::IsNullOrWhiteSpace($goBin)) {
+            $goBin = Join-Path (go env GOPATH) "bin"
+          }
+          $env:Path = "$goBin;$env:Path"
+          $resourcePrefix = "cmd\netquota\netquota"
+          $resourceFile = "${resourcePrefix}_windows_amd64.syso"
+          go-winres simply `
+            --arch amd64 `
+            --out $resourcePrefix `
+            --icon assets\windows\icon.ico `
+            --manifest gui `
+            --file-version "${releaseCoreVersion}.0" `
+            --product-version "${releaseCoreVersion}.0" `
+            --file-description "NetQuota" `
+            --product-name "NetQuota" `
+            --original-filename "netquota.exe"
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
+          if (-not (Test-Path -LiteralPath $resourceFile)) {
+            throw "go-winres did not produce $resourceFile"
+          }
+
           go build -trimpath -tags migrated_fynedo -ldflags $guiLdflags -o "$staging\netquota.exe" .\cmd\netquota
+          if ($LASTEXITCODE -ne 0) {
+            Remove-Item -LiteralPath $resourceFile -Force -ErrorAction SilentlyContinue
+            exit $LASTEXITCODE
+          }
+          Remove-Item -LiteralPath $resourceFile -Force
           go build -trimpath -tags migrated_fynedo -ldflags $consoleLdflags -o "$staging\netquota-console.exe" .\cmd\netquota
 
           $hasCertificate = -not [string]::IsNullOrWhiteSpace($env:WINDOWS_SIGNING_CERTIFICATE_BASE64)
@@ -153,7 +190,7 @@ jobs:
             Write-Host "No Windows signing certificate configured; building unsigned artifacts."
           }
 
-          Copy-Item README.md, LICENSE, PRIVACY.md $staging
+          Copy-Item README.md, LICENSE, PRIVACY.md, assets\windows\icon.ico $staging
           Copy-Item LICENSE "$staging\LICENSE.txt"
           $sourceDir = (Resolve-Path $staging).Path
           $iscc = (Get-Command iscc.exe -ErrorAction Stop).Source
@@ -186,9 +223,92 @@ jobs:
           path: release/netquota-windows-amd64-setup.exe
           if-no-files-found: error
 
+  build-linux:
+    name: Build Linux release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.ref }}
+
+      - name: Install Linux desktop headers
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang lld libgl1-mesa-dev libegl1-mesa-dev libgles2-mesa-dev libwayland-dev libxkbcommon-dev libxkbcommon-x11-dev xorg-dev xvfb language-pack-en
+          echo "CC=clang" >> "$GITHUB_ENV"
+          echo "CGO_LDFLAGS=-fuse-ld=lld" >> "$GITHUB_ENV"
+          echo "LANG=en_US.UTF-8" >> "$GITHUB_ENV"
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Check formatting
+        shell: bash
+        run: |
+          files="$(gofmt -l .)"
+          if [[ -n "$files" ]]; then
+            echo "gofmt would change:"
+            echo "$files"
+            exit 1
+          fi
+
+      - name: Run vet
+        run: go vet ./...
+
+      - name: Run unit tests
+        run: go test ./...
+
+      - name: Verify generated icon assets
+        shell: bash
+        run: |
+          go run ./tools/iconassets
+          git diff --exit-code -- assets/icon-256.png assets/windows/icon.ico
+
+      - name: Build Linux package
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+
+          semver_pattern='^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$'
+          if [[ ! "$RELEASE_TAG" =~ $semver_pattern ]]; then
+            echo "tag must use the SemVer form vX.Y.Z or vX.Y.Z-prerelease" >&2
+            exit 1
+          fi
+          release_version="${RELEASE_TAG#v}"
+          if [[ "$release_version" == *-* ]]; then
+            prerelease="${release_version#*-}"
+            IFS='.' read -r -a identifiers <<< "$prerelease"
+            for identifier in "${identifiers[@]}"; do
+              if [[ "$identifier" =~ ^[0-9]+$ && ${#identifier} -gt 1 && "${identifier:0:1}" == "0" ]]; then
+                echo "numeric pre-release identifiers must not contain leading zeroes" >&2
+                exit 1
+              fi
+            done
+          fi
+
+          version_ldflag="-X=github.com/KageRyo/netquota/internal/version.Value=$release_version"
+          staging="release/netquota-linux-amd64"
+          mkdir -p "$staging"
+          go build -trimpath -ldflags "-s -w $version_ldflag" -o "$staging/netquota" ./cmd/netquota
+          cp README.md LICENSE PRIVACY.md assets/icon-256.png "$staging/"
+          tar -C release -czf netquota-linux-amd64.tar.gz netquota-linux-amd64
+
+      - name: Upload Linux package
+        uses: actions/upload-artifact@v6
+        with:
+          name: netquota-linux-amd64
+          path: netquota-linux-amd64.tar.gz
+          if-no-files-found: error
+
   create-draft-release:
     name: Create draft release
-    needs: build-windows
+    needs: [build-windows, build-linux]
     runs-on: ubuntu-latest
     steps:
       - name: Download Windows package
@@ -201,6 +321,12 @@ jobs:
         uses: actions/download-artifact@v7
         with:
           name: netquota-windows-amd64-installer
+          path: dist
+
+      - name: Download Linux package
+        uses: actions/download-artifact@v7
+        with:
+          name: netquota-linux-amd64
           path: dist
 
       - name: Create or update draft release
@@ -232,6 +358,7 @@ jobs:
             gh release upload "$RELEASE_TAG" \
               dist/netquota-windows-amd64.zip \
               dist/netquota-windows-amd64-setup.exe \
+              dist/netquota-linux-amd64.tar.gz \
               --clobber
           else
             release_create_args=(
@@ -246,6 +373,7 @@ jobs:
             gh release create "$RELEASE_TAG" \
               dist/netquota-windows-amd64.zip \
               dist/netquota-windows-amd64-setup.exe \
+              dist/netquota-linux-amd64.tar.gz \
               "${release_create_args[@]}"
           fi
 

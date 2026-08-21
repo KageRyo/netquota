@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/KageRyo/netquota/assets"
 	monitorapp "github.com/KageRyo/netquota/internal/app"
 	"github.com/KageRyo/netquota/internal/config"
 	"github.com/KageRyo/netquota/internal/format"
@@ -85,7 +86,7 @@ func main() {
 	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
-	monitor := monitorapp.NewMonitor(cfg, state, provider, store, store, notify.System{}, logger)
+	monitor := monitorapp.NewMonitor(cfg, state, provider, store, store, notify.System{IconData: assets.TrayIconPNG()}, logger)
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 

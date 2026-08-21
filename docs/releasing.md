@@ -4,7 +4,7 @@ NetQuota is an open-source project. Releases are built from GitHub Actions and m
 
 The project privacy notice is documented in [PRIVACY.md](../PRIVACY.md). Keep it aligned with any future network or telemetry behavior.
 
-## Windows release flow
+## Release flow
 
 From WSL, start the manual workflow:
 
@@ -12,7 +12,11 @@ From WSL, start the manual workflow:
 gh workflow run draft-release.yml --ref main -f tag=v0.1.0-alpha.1
 ```
 
-The workflow runs checks on `windows-latest`, builds the GUI and console binaries, creates the portable zip, and creates or updates a GitHub draft release with the Windows installer. The maintainer should install the draft installer on a real Windows machine and verify startup, tray behavior, update behavior, and uninstall before publishing the release.
+The workflow runs checks on `windows-latest` and `ubuntu-latest`, embeds the generated Windows ICO into the GUI executable with `go-winres`, builds the GUI and console binaries for Windows, builds the Linux amd64 portable archive, and creates or updates a GitHub draft release with all three artifacts. The maintainer should install the draft Windows installer and run the Linux archive on real machines before publishing the release.
+
+The Windows GUI executable, installer, Start Menu shortcut, optional desktop shortcut, and uninstaller all use the generated `assets/windows/icon.ico`. The ICO is regenerated from `assets/icon.svg` by `make icons`; CI fails if the committed derived files are stale.
+
+The Linux artifact is `netquota-linux-amd64.tar.gz`. It contains the `netquota` GUI/CLI binary, project documentation, and `icon-256.png`; it requires the Linux desktop libraries listed in the README and is intentionally a portable tarball rather than a distro-specific package.
 
 The installer shows the repository's `LICENSE` file and requires the user to accept it before continuing. This is an installer consent step; the project remains available under the MIT License.
 
@@ -53,10 +57,12 @@ For an open-source project, [SignPath Foundation](https://signpath.org/) is anot
 
 ## Publication gate
 
-Do not publish a draft until the Windows real-machine checks are complete. A release is ready only after:
+Do not publish a draft until the Windows and Linux real-machine checks are complete. A release is ready only after:
 
 - the installer displays the MIT License and blocks continuation until it is accepted;
 - the GUI starts without a console window;
+- the GUI executable, installer, and shortcuts display the NetQuota icon;
+- the Linux archive starts after its documented desktop dependencies are installed;
 - the tray menu shows total, download, and upload usage;
 - the installer and portable package contain the same release version;
 - the application can be uninstalled cleanly; and

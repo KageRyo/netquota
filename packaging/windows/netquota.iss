@@ -20,6 +20,7 @@ AppPublisherURL=https://github.com/KageRyo/netquota
 AppSupportURL=https://github.com/KageRyo/netquota/issues
 AppUpdatesURL=https://github.com/KageRyo/netquota/releases/latest
 LicenseFile="{#SourceDir}\LICENSE.txt"
+SetupIconFile="{#SourceDir}\icon.ico"
 DefaultDirName={localappdata}\Programs\NetQuota
 DefaultGroupName=NetQuota
 DisableProgramGroupPage=yes
@@ -27,7 +28,7 @@ PrivilegesRequired=lowest
 PrivilegesRequiredOverridesAllowed=commandline
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
-UninstallDisplayIcon={app}\netquota.exe
+UninstallDisplayIcon="{app}\icon.ico"
 OutputBaseFilename=netquota-windows-amd64-setup
 Compression=lzma2/ultra64
 SolidCompression=yes
@@ -51,13 +52,14 @@ Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription:
 [Files]
 Source: "{#SourceDir}\netquota.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#SourceDir}\netquota-console.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#SourceDir}\icon.ico"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#SourceDir}\README.md"; DestDir: "{app}"; Flags: isreadme
 Source: "{#SourceDir}\PRIVACY.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#SourceDir}\LICENSE.txt"; DestDir: "{app}"; DestName: "LICENSE"; Flags: ignoreversion
 
 [Icons]
-Name: "{autoprograms}\NetQuota"; Filename: "{app}\netquota.exe"; WorkingDir: "{app}"
-Name: "{autodesktop}\NetQuota"; Filename: "{app}\netquota.exe"; WorkingDir: "{app}"; Tasks: desktopicon
+Name: "{autoprograms}\NetQuota"; Filename: "{app}\netquota.exe"; WorkingDir: "{app}"; IconFilename: "{app}\icon.ico"; IconIndex: 0
+Name: "{autodesktop}\NetQuota"; Filename: "{app}\netquota.exe"; WorkingDir: "{app}"; IconFilename: "{app}\icon.ico"; IconIndex: 0; Tasks: desktopicon
 
 [Run]
 Filename: "{app}\netquota.exe"; Description: "Launch NetQuota"; Flags: nowait postinstall skipifsilent
