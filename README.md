@@ -62,6 +62,16 @@ go build -trimpath -o bin/netquota ./cmd/netquota
 
 The tray window's Settings page lets you select the interface, change each quota in GiB, edit each threshold list, enable notifications, and configure start-on-login.
 
+## Windows draft builds
+
+WSL can run the tests and trigger the Windows build, but it cannot run the Windows system tray UI itself. Maintainers can trigger the manual [`draft-release.yml`](.github/workflows/draft-release.yml) workflow from WSL:
+
+```sh
+gh workflow run draft-release.yml --ref main -f tag=v0.1.0
+```
+
+The workflow runs formatting, vet, and unit tests on `windows-latest`, builds `netquota-windows-amd64.zip`, and attaches it to a GitHub draft release. Download the zip from the draft release and run `netquota.exe` on a Windows machine. A draft is not published until a maintainer explicitly publishes it.
+
 ## Configuration
 
 NetQuota creates `config.json` and `state.json` below the platform's per-user configuration directory. The exact location is reported by the platform; it is never stored in the repository. Custom paths can be supplied for diagnostics:
