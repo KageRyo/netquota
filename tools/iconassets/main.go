@@ -20,6 +20,7 @@ func main() {
 	sourcePath := flag.String("source", "assets/icon.svg", "canonical SVG source")
 	pngPath := flag.String("png", "assets/icon-256.png", "high-resolution PNG output")
 	icoPath := flag.String("ico", "assets/windows/icon.ico", "Windows ICO output")
+	trayPath := flag.String("tray", "assets/tray/icon-16.png", "system-tray PNG output")
 	flag.Parse()
 
 	svg, err := os.ReadFile(*sourcePath)
@@ -33,6 +34,14 @@ func main() {
 	}
 	if err := writePNG(*pngPath, large); err != nil {
 		fail("write PNG output", err)
+	}
+
+	tray, err := render(svg, 16)
+	if err != nil {
+		fail("render 16px tray PNG", err)
+	}
+	if err := writePNG(*trayPath, tray); err != nil {
+		fail("write tray PNG output", err)
 	}
 
 	icons := make([]image.Image, 0, len(iconSizes))
