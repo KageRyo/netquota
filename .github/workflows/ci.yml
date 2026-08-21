@@ -46,23 +46,11 @@ jobs:
             exit 1
           fi
 
-      - name: Generate icon assets
-        shell: bash
-        run: go run ./tools/iconassets
-
-      - name: Upload generated icon assets
-        uses: actions/upload-artifact@v6
-        with:
-          name: generated-icons-${{ runner.os }}
-          path: |
-            assets/icon-256.png
-            assets/tray/icon-16.png
-            assets/windows/icon.ico
-          if-no-files-found: error
-
       - name: Verify generated icon assets
         shell: bash
-        run: git diff --exit-code -- assets/icon-256.png assets/tray/icon-16.png assets/windows/icon.ico
+        run: |
+          go run ./tools/iconassets
+          git diff --exit-code -- assets/icon-256.png assets/tray/icon-16.png
 
       - name: Run vet
         run: go vet ./...
