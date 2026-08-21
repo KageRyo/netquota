@@ -11,6 +11,7 @@ import (
 	"github.com/KageRyo/netquota/internal/model"
 	"github.com/KageRyo/netquota/internal/network"
 	"github.com/KageRyo/netquota/internal/quota"
+	updateapp "github.com/KageRyo/netquota/internal/update"
 )
 
 func TestParseLimitSupportsIndependentGiBSettings(t *testing.T) {
@@ -158,6 +159,27 @@ func TestTrayMenuShowsAvailableUpdate(t *testing.T) {
 	tray.setChecking()
 	if !tray.updateItem.Disabled || tray.updateItem.Action != nil {
 		t.Fatal("checking state should disable the update item")
+	}
+}
+
+func TestReleasePageURLDoesNotUseDownloadAsset(t *testing.T) {
+	release := updateapp.Release{
+		PageURL:     "https://github.com/KageRyo/netquota/releases/tag/v0.2.0",
+		DownloadURL: "https://github.com/KageRyo/netquota/releases/download/v0.2.0/netquota-windows-amd64-setup.exe",
+	}
+	got, err := releasePageURL(release)
+	if err != nil {
+		t.Fatalf("releasePageURL: %v", err)
+	}
+	if got.String() != release.PageURL {
+		t.Fatalf("release page URL = %q, want %q", got, release.PageURL)
+	}
+}
+
+func TestReleasePageURLRejectsNonGitHubPage(t *testing.T) {
+	_, err := releasePageURL(updateapp.Release{PageURL: "https://example.test/release"})
+	if err == nil {
+		t.Fatal("releasePageURL accepted a non-GitHub page")
 	}
 }
 

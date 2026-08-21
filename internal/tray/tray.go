@@ -289,13 +289,13 @@ func (u *ui) startUpdateCheck(ctx context.Context, interactive bool) {
 func (u *ui) confirmUpdate(release updateapp.Release) {
 	if release.DownloadURL == "" {
 		dialog.ShowInformation("Update available", "NetQuota "+release.TagName+" is available on the release page, but no compatible package was published.", u.window)
-		u.openRelease(release)
+		u.openReleasePage(release)
 		return
 	}
 	if release.ChecksumURL == "" {
 		dialog.ShowConfirm("Open release page?", "This release does not include a checksum manifest, so NetQuota cannot install it automatically.", func(open bool) {
 			if open {
-				u.openRelease(release)
+				u.openReleasePage(release)
 			}
 		}, u.window)
 		return
@@ -353,8 +353,10 @@ func (u *ui) downloadAndInstall(release updateapp.Release) {
 			return
 		}
 
-		statusMessage := "Installing update…"
-		fyne.Do(func() { status.SetText(statusMessage) })
+		fyne.DoAndWait(func() {
+			status.SetText("Installing update…")
+			cancelButton.Disable()
+		})
 		installErr := updateapp.Install(context.Background(), path, u.executable)
 		if runtime.GOOS != "windows" || installErr != nil {
 			_ = os.RemoveAll(updateDirectory)
@@ -383,7 +385,7 @@ func (u *ui) finishUpdateDownload(progressDialog *dialog.CustomDialog, release u
 		if errors.Is(err, updateapp.ErrUnsupportedPlatform) || errors.Is(err, os.ErrPermission) {
 			dialog.ShowConfirm("Automatic update unavailable", err.Error()+" Open the release page instead?", func(open bool) {
 				if open {
-					u.openRelease(release)
+					u.openReleasePage(release)
 				}
 			}, u.window)
 			return
@@ -401,22 +403,26 @@ func (u *ui) restoreUpdateAction(release updateapp.Release) {
 	})
 }
 
-func (u *ui) openRelease(release updateapp.Release) {
-	target := release.DownloadURL
-	if target == "" {
-		target = release.PageURL
-	}
-	parsed, err := url.Parse(target)
-	if err != nil || parsed.Scheme != "https" || !strings.EqualFold(parsed.Host, "github.com") {
-		if err == nil {
-			err = fmt.Errorf("unexpected release URL %q", target)
-		}
+func (u *ui) openReleasePage(release updateapp.Release) {
+	parsed, err := releasePageURL(release)
+	if err != nil {
 		dialog.ShowError(fmt.Errorf("open update: %w", err), u.window)
 		return
 	}
 	if err := u.application.OpenURL(parsed); err != nil {
 		dialog.ShowError(fmt.Errorf("open update: %w", err), u.window)
 	}
+}
+
+func releasePageURL(release updateapp.Release) (*url.URL, error) {
+	parsed, err := url.Parse(release.PageURL)
+	if err != nil {
+		return nil, err
+	}
+	if parsed.Scheme != "https" || parsed.User != nil || !strings.EqualFold(parsed.Host, "github.com") {
+		return nil, fmt.Errorf("unexpected release URL %q", release.PageURL)
+	}
+	return parsed, nil
 }
 
 func (u *ui) showSettings() {
