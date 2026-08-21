@@ -1,2 +1,7 @@
+[Details]
+Name = "NetQuota"
+ID = "com.kageryo.netquota"
+Icon = "assets/tray/icon-16.png"
+
 [Migrations]
 fyneDo = true

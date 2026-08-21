@@ -16,6 +16,7 @@ import (
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
+	"github.com/KageRyo/netquota/assets"
 	monitorapp "github.com/KageRyo/netquota/internal/app"
 	"github.com/KageRyo/netquota/internal/config"
 	"github.com/KageRyo/netquota/internal/format"
@@ -29,7 +30,7 @@ import (
 
 func Run(ctx context.Context, monitor *monitorapp.Monitor, executable string) {
 	application := fyneapp.NewWithID("com.kageryo.netquota")
-	application.SetIcon(theme.ComputerIcon())
+	application.SetIcon(fyne.NewStaticResource("icon.svg", assets.IconSVG()))
 	window := application.NewWindow("NetQuota")
 	ui := newUI(application, window, monitor, executable)
 	window.SetContent(ui.dashboard())
@@ -37,6 +38,7 @@ func Run(ctx context.Context, monitor *monitorapp.Monitor, executable string) {
 	window.SetCloseIntercept(window.Hide)
 
 	if desktopApp, ok := application.(desktop.App); ok {
+		desktopApp.SetSystemTrayIcon(fyne.NewStaticResource("icon-16.png", assets.TrayIconPNG()))
 		trayMenu := newTrayMenu(window, ui.showSettings, ui.checkForUpdates)
 		ui.trayMenu = trayMenu
 		desktopApp.SetSystemTrayMenu(trayMenu.menu)

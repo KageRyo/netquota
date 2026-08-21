@@ -1,4 +1,8 @@
-# NetQuota
+<div align="center">
+  <img src="assets/icon.svg" alt="NetQuota icon" width="128" height="128">
+  <h1>NetQuota</h1>
+  <p>Monitor daily network usage from your system tray and get warned before a quota is reached.</p>
+</div>
 
 [![CI](https://github.com/KageRyo/netquota/actions/workflows/ci.yml/badge.svg)](https://github.com/KageRyo/netquota/actions/workflows/ci.yml)
 [![Latest release](https://img.shields.io/github/v/release/KageRyo/netquota?display_name=tag&include_prereleases=true&sort=semver)](https://github.com/KageRyo/netquota/releases)
@@ -18,6 +22,7 @@ Each enabled limit has its own notification percentages. A limit of `0` disables
 ## Features
 
 - Windows and Linux desktop tray application built with Go and Fyne
+- Branded application, system-tray, and quota-warning notification icons
 - Select an interface by name, hardware address, and IPv4 identity
 - Daily download, upload, and total usage
 - Adjustable total, download, and upload quotas
@@ -155,6 +160,8 @@ network provider → usage tracker → quota evaluator
                          ├──────→ desktop notification
                          └──────→ CLI / system tray
 ```
+
+The application embeds the canonical assets from [`assets/`](assets/): the SVG is used for the application and window identity, while the 16px PNG is used for system-tray, desktop notification, and Fyne packaging surfaces. [`FyneApp.toml`](FyneApp.toml) points packaging tools at the PNG-compatible variant.
 
 Run the same checks used by CI:
 

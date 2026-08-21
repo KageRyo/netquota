@@ -8,9 +8,13 @@ type Notifier interface {
 
 type System struct {
 	IconPath string
+	IconData []byte
 }
 
 func (s System) Notify(title, message string) error {
+	if len(s.IconData) > 0 {
+		return beeep.Notify(title, message, s.IconData)
+	}
 	return beeep.Notify(title, message, s.IconPath)
 }
 
