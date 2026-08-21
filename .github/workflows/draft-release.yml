@@ -6,7 +6,7 @@ on:
       tag:
         description: Release tag to create or update
         required: true
-        default: v0.1.0
+        default: v0.1.0-alpha.1
         type: string
 
 permissions:
@@ -52,11 +52,23 @@ jobs:
           WINDOWS_SIGNING_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_SIGNING_CERTIFICATE_PASSWORD }}
           WINDOWS_SIGNING_TIMESTAMP_URL: ${{ vars.WINDOWS_SIGNING_TIMESTAMP_URL }}
         run: |
-          if ($env:RELEASE_TAG -notmatch '^v[0-9]+\.[0-9]+\.[0-9]+$') {
-            Write-Error "tag must use the form vX.Y.Z"
+          $semverPattern = '^v(?<core>(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*))(?<prerelease>-(?:[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$'
+          if ($env:RELEASE_TAG -match $semverPattern) {
+            $releaseCoreVersion = $Matches.core
+            $releasePrerelease = $Matches.prerelease
+          } else {
+            Write-Error "tag must use the SemVer form vX.Y.Z or vX.Y.Z-prerelease"
             exit 1
           }
-          $releaseVersion = $env:RELEASE_TAG.Substring(1)
+          if ($releasePrerelease) {
+            foreach ($identifier in $releasePrerelease.Substring(1).Split('.')) {
+              if ($identifier -match '^[0-9]+$' -and $identifier.Length -gt 1 -and $identifier.StartsWith('0')) {
+                Write-Error "numeric pre-release identifiers must not contain leading zeroes"
+                exit 1
+              }
+            }
+          }
+          $releaseVersion = "$releaseCoreVersion$releasePrerelease"
           $versionLdflag = "-X=github.com/KageRyo/netquota/internal/version.Value=$releaseVersion"
           $staging = "release\netquota-windows-amd64"
           New-Item -ItemType Directory -Force $staging | Out-Null
@@ -145,7 +157,7 @@ jobs:
           Copy-Item LICENSE "$staging\LICENSE.txt"
           $sourceDir = (Resolve-Path $staging).Path
           $iscc = (Get-Command iscc.exe -ErrorAction Stop).Source
-          & $iscc "/DAppVersion=$releaseVersion" "/DSourceDir=$sourceDir" "/Orelease" .\packaging\windows\netquota.iss
+          & $iscc "/DAppVersion=$releaseVersion" "/DAppBinaryVersion=$releaseCoreVersion" "/DSourceDir=$sourceDir" "/Orelease" .\packaging\windows\netquota.iss
           if ($LASTEXITCODE -ne 0) {
             exit $LASTEXITCODE
           }
@@ -201,8 +213,8 @@ jobs:
         run: |
           set -euo pipefail
 
-          if [[ ! "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "tag must use the form vX.Y.Z" >&2
+          if [[ ! "$RELEASE_TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$ ]]; then
+            echo "tag must use the SemVer form vX.Y.Z or vX.Y.Z-prerelease" >&2
             exit 1
           fi
 
@@ -212,19 +224,29 @@ jobs:
               echo "refusing to modify a published release: $RELEASE_TAG" >&2
               exit 1
             fi
-            gh release edit "$RELEASE_TAG" --draft --target "$RELEASE_TARGET"
+            release_edit_args=(--draft --target "$RELEASE_TARGET")
+            if [[ "$RELEASE_TAG" == *-* ]]; then
+              release_edit_args+=(--prerelease)
+            fi
+            gh release edit "$RELEASE_TAG" "${release_edit_args[@]}"
             gh release upload "$RELEASE_TAG" \
               dist/netquota-windows-amd64.zip \
               dist/netquota-windows-amd64-setup.exe \
               --clobber
           else
+            release_create_args=(
+              --draft
+              --target "$RELEASE_TARGET"
+              --title "NetQuota $RELEASE_TAG"
+              --generate-notes
+            )
+            if [[ "$RELEASE_TAG" == *-* ]]; then
+              release_create_args+=(--prerelease)
+            fi
             gh release create "$RELEASE_TAG" \
               dist/netquota-windows-amd64.zip \
               dist/netquota-windows-amd64-setup.exe \
-              --draft \
-              --target "$RELEASE_TARGET" \
-              --title "NetQuota $RELEASE_TAG" \
-              --generate-notes
+              "${release_create_args[@]}"
           fi
 
-          gh release view "$RELEASE_TAG" --json url,isDraft,tagName
+          gh release view "$RELEASE_TAG" --json url,isDraft,isPrerelease,tagName

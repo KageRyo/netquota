@@ -43,9 +43,10 @@ type apiAsset struct {
 }
 
 type semanticVersion struct {
-	Major int
-	Minor int
-	Patch int
+	Major      int
+	Minor      int
+	Patch      int
+	PreRelease []string
 }
 
 func NewChecker() Checker {
@@ -113,13 +114,35 @@ func (c Checker) Check(ctx context.Context, current string) (Release, bool, erro
 
 func parseVersion(value string) (semanticVersion, error) {
 	value = strings.TrimPrefix(strings.TrimSpace(value), "v")
-	parts := strings.Split(value, ".")
+	if value == "" {
+		return semanticVersion{}, ErrInvalidVersion
+	}
+
+	versionAndBuild := strings.Split(value, "+")
+	if len(versionAndBuild) > 2 {
+		return semanticVersion{}, ErrInvalidVersion
+	}
+	if len(versionAndBuild) == 2 && !validIdentifiers(versionAndBuild[1], true) {
+		return semanticVersion{}, ErrInvalidVersion
+	}
+
+	version := versionAndBuild[0]
+	preRelease := []string(nil)
+	if separator := strings.IndexByte(version, '-'); separator >= 0 {
+		preRelease = strings.Split(version[separator+1:], ".")
+		if !validIdentifiers(strings.Join(preRelease, "."), false) {
+			return semanticVersion{}, ErrInvalidVersion
+		}
+		version = version[:separator]
+	}
+
+	parts := strings.Split(version, ".")
 	if len(parts) != 3 {
 		return semanticVersion{}, ErrInvalidVersion
 	}
 	values := [3]int{}
 	for index, part := range parts {
-		if part == "" || strings.HasPrefix(part, "-") || strings.Contains(part, "+") {
+		if !validCoreNumber(part) {
 			return semanticVersion{}, ErrInvalidVersion
 		}
 		parsed, err := strconv.Atoi(part)
@@ -128,7 +151,12 @@ func parseVersion(value string) (semanticVersion, error) {
 		}
 		values[index] = parsed
 	}
-	return semanticVersion{Major: values[0], Minor: values[1], Patch: values[2]}, nil
+	return semanticVersion{
+		Major:      values[0],
+		Minor:      values[1],
+		Patch:      values[2],
+		PreRelease: preRelease,
+	}, nil
 }
 
 func compareVersions(left, right semanticVersion) int {
@@ -138,7 +166,103 @@ func compareVersions(left, right semanticVersion) int {
 	if left.Minor != right.Minor {
 		return compareInts(left.Minor, right.Minor)
 	}
-	return compareInts(left.Patch, right.Patch)
+	if left.Patch != right.Patch {
+		return compareInts(left.Patch, right.Patch)
+	}
+	return comparePreRelease(left.PreRelease, right.PreRelease)
+}
+
+func validCoreNumber(value string) bool {
+	if value == "" || (len(value) > 1 && value[0] == '0') {
+		return false
+	}
+	for index := 0; index < len(value); index++ {
+		if value[index] < '0' || value[index] > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+func validIdentifiers(value string, allowNumericLeadingZero bool) bool {
+	if value == "" {
+		return false
+	}
+	for _, identifier := range strings.Split(value, ".") {
+		if identifier == "" {
+			return false
+		}
+		numeric := true
+		for index := 0; index < len(identifier); index++ {
+			character := identifier[index]
+			if character < '0' || character > '9' {
+				numeric = false
+			}
+			if (character < '0' || character > '9') &&
+				(character < 'A' || character > 'Z') &&
+				(character < 'a' || character > 'z') && character != '-' {
+				return false
+			}
+		}
+		if numeric && !allowNumericLeadingZero && len(identifier) > 1 && identifier[0] == '0' {
+			return false
+		}
+	}
+	return true
+}
+
+func comparePreRelease(left, right []string) int {
+	if len(left) == 0 && len(right) == 0 {
+		return 0
+	}
+	if len(left) == 0 {
+		return 1
+	}
+	if len(right) == 0 {
+		return -1
+	}
+
+	for index := 0; index < len(left) && index < len(right); index++ {
+		leftNumeric := isNumericIdentifier(left[index])
+		rightNumeric := isNumericIdentifier(right[index])
+		if leftNumeric && rightNumeric {
+			if len(left[index]) != len(right[index]) {
+				return compareInts(len(left[index]), len(right[index]))
+			}
+			if left[index] != right[index] {
+				if left[index] < right[index] {
+					return -1
+				}
+				return 1
+			}
+			continue
+		}
+		if leftNumeric != rightNumeric {
+			if leftNumeric {
+				return -1
+			}
+			return 1
+		}
+		if left[index] != right[index] {
+			if left[index] < right[index] {
+				return -1
+			}
+			return 1
+		}
+	}
+	return compareInts(len(left), len(right))
+}
+
+func isNumericIdentifier(value string) bool {
+	if value == "" {
+		return false
+	}
+	for index := 0; index < len(value); index++ {
+		if value[index] < '0' || value[index] > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 func compareInts(left, right int) int {

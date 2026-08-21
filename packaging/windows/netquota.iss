@@ -2,6 +2,10 @@
 #define AppVersion "0.1.0"
 #endif
 
+#ifndef AppBinaryVersion
+#define AppBinaryVersion "0.1.0"
+#endif
+
 #ifndef SourceDir
 #define SourceDir "release\netquota-windows-amd64"
 #endif
@@ -34,7 +38,9 @@ ChangesAssociations=no
 VersionInfoCompany=KageRyo
 VersionInfoDescription=NetQuota Windows installer
 VersionInfoProductName=NetQuota
-VersionInfoProductVersion={#AppVersion}
+VersionInfoVersion={#AppBinaryVersion}
+VersionInfoProductVersion={#AppBinaryVersion}
+VersionInfoTextVersion={#AppVersion}
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"

@@ -1,7 +1,7 @@
 # NetQuota
 
 [![CI](https://github.com/KageRyo/netquota/actions/workflows/ci.yml/badge.svg)](https://github.com/KageRyo/netquota/actions/workflows/ci.yml)
-[![Latest release](https://img.shields.io/github/v/release/KageRyo/netquota?display_name=tag&sort=semver)](https://github.com/KageRyo/netquota/releases)
+[![Latest release](https://img.shields.io/github/v/release/KageRyo/netquota?display_name=tag&include_prereleases=true&sort=semver)](https://github.com/KageRyo/netquota/releases)
 [![Go Reference](https://pkg.go.dev/badge/github.com/KageRyo/netquota.svg)](https://pkg.go.dev/github.com/KageRyo/netquota)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
@@ -68,7 +68,7 @@ The tray window's Settings page lets you select the interface, change each quota
 WSL can run the tests and trigger the Windows build, but it cannot run the Windows system tray UI itself. Maintainers can trigger the manual [`draft-release.yml`](.github/workflows/draft-release.yml) workflow from WSL:
 
 ```sh
-gh workflow run draft-release.yml --ref main -f tag=v0.1.0
+gh workflow run draft-release.yml --ref main -f tag=v0.1.0-alpha.1
 ```
 
 The workflow runs formatting, vet, and unit tests on `windows-latest`, builds both a portable package and an installer, and attaches them to a GitHub draft release. The portable archive contains two binaries:
@@ -171,7 +171,7 @@ See [docs/design.md](docs/design.md) for the component boundaries and data model
 
 ## Versioning and license
 
-The current development release is **NetQuota v0.1.0**. Releases use semantic version numbers such as `v0.1.0`.
+The current development release is **NetQuota v0.1.0-alpha.1**. Releases use semantic version numbers such as `v0.1.0`, with pre-release tags such as `v0.1.0-alpha.1`.
 
 NetQuota is released under the [MIT License](LICENSE).
 

@@ -9,7 +9,7 @@ The project privacy notice is documented in [PRIVACY.md](../PRIVACY.md). Keep it
 From WSL, start the manual workflow:
 
 ```sh
-gh workflow run draft-release.yml --ref main -f tag=v0.1.0
+gh workflow run draft-release.yml --ref main -f tag=v0.1.0-alpha.1
 ```
 
 The workflow runs checks on `windows-latest`, builds the GUI and console binaries, creates the portable zip, and creates or updates a GitHub draft release with the Windows installer. The maintainer should install the draft installer on a real Windows machine and verify startup, tray behavior, update behavior, and uninstall before publishing the release.
