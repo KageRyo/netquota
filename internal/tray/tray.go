@@ -34,7 +34,9 @@ func Run(ctx context.Context, monitor *monitorapp.Monitor, executable string) {
 	window.SetCloseIntercept(window.Hide)
 
 	if desktopApp, ok := application.(desktop.App); ok {
-		desktopApp.SetSystemTrayMenu(newTrayMenu(window, ui.showSettings))
+		trayMenu := newTrayMenu(window, ui.showSettings)
+		ui.trayMenu = trayMenu
+		desktopApp.SetSystemTrayMenu(trayMenu.menu)
 		desktopApp.SetSystemTrayWindow(window)
 	}
 
@@ -52,13 +54,46 @@ func Run(ctx context.Context, monitor *monitorapp.Monitor, executable string) {
 	cancel()
 }
 
-func newTrayMenu(window fyne.Window, showSettings func()) *fyne.Menu {
-	return fyne.NewMenu("NetQuota",
+type trayMenu struct {
+	menu         *fyne.Menu
+	totalItem    *fyne.MenuItem
+	downloadItem *fyne.MenuItem
+	uploadItem   *fyne.MenuItem
+}
+
+func newTrayMenu(window fyne.Window, showSettings func()) *trayMenu {
+	totalItem := newTrayMetricItem("Total")
+	downloadItem := newTrayMetricItem("Download")
+	uploadItem := newTrayMetricItem("Upload")
+	menu := fyne.NewMenu("NetQuota",
+		totalItem,
+		downloadItem,
+		uploadItem,
+		fyne.NewMenuItemSeparator(),
 		fyne.NewMenuItem("Show window", func() {
 			window.Show()
 		}),
 		fyne.NewMenuItem("Settings", showSettings),
 	)
+	return &trayMenu{
+		menu:         menu,
+		totalItem:    totalItem,
+		downloadItem: downloadItem,
+		uploadItem:   uploadItem,
+	}
+}
+
+func newTrayMetricItem(name string) *fyne.MenuItem {
+	item := fyne.NewMenuItem(name+": —", nil)
+	item.Disabled = true
+	return item
+}
+
+func (m *trayMenu) update(status quota.Status) {
+	m.totalItem.Label = metricText("Total", status.Total.UsedBytes, status.Total)
+	m.downloadItem.Label = metricText("Download", status.Download.UsedBytes, status.Download)
+	m.uploadItem.Label = metricText("Upload", status.Upload.UsedBytes, status.Upload)
+	m.menu.Refresh()
 }
 
 type ui struct {
@@ -74,6 +109,7 @@ type ui struct {
 	uploadLabel    *widget.Label
 	totalLabel     *widget.Label
 	remainingLabel *widget.Label
+	trayMenu       *trayMenu
 }
 
 func newUI(application fyne.App, window fyne.Window, monitor *monitorapp.Monitor, executable string) *ui {
@@ -151,6 +187,9 @@ func (u *ui) sample(ctx context.Context) {
 			u.remainingLabel.SetText(fmt.Sprintf("Remaining: %s", format.Bytes(sample.Quota.Total.RemainingBytes)))
 		} else {
 			u.remainingLabel.SetText("Remaining: total quota disabled")
+		}
+		if u.trayMenu != nil {
+			u.trayMenu.update(sample.Quota)
 		}
 	})
 }

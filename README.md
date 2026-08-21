@@ -134,6 +134,8 @@ When no valid baseline exists for the current day, the first sample establishes 
 
 NetQuota reports the local operating system's interface counters. It is an estimate of the traffic visible to this machine, not an authoritative counter from a school gateway, ISP, switch, or other network administrator. Keep a safety margin below any externally enforced quota.
 
+> **Daily accounting limitation:** NetQuota cannot reconstruct traffic that happened before the first valid counter baseline for the current day. This includes traffic used before the first launch of that day, or traffic after the saved state or operating-system counters were reset. If a valid baseline was persisted and the counters remain monotonic, traffic that occurs while NetQuota is closed may still be included on the next sample.
+
 NetQuota does not inspect packets, require administrator/root privileges, measure traffic per process, shape bandwidth, block network access, or upload usage data to a server.
 
 ## Development
