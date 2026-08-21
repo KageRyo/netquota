@@ -54,7 +54,7 @@ jobs:
           Compress-Archive -Path "$staging\*" -DestinationPath "netquota-windows-amd64.zip" -Force
 
       - name: Upload workflow artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: netquota-windows-amd64
           path: netquota-windows-amd64.zip
@@ -66,7 +66,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Download Windows package
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: netquota-windows-amd64
           path: dist
