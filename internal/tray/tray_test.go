@@ -1,6 +1,8 @@
 package tray
 
 import (
+	"context"
+	"errors"
 	"testing"
 
 	"fyne.io/fyne/v2"
@@ -180,6 +182,25 @@ func TestReleasePageURLRejectsNonGitHubPage(t *testing.T) {
 	_, err := releasePageURL(updateapp.Release{PageURL: "https://example.test/release"})
 	if err == nil {
 		t.Fatal("releasePageURL accepted a non-GitHub page")
+	}
+}
+
+func TestEnterInstallingStateRejectsCancellationBeforeTransition(t *testing.T) {
+	app := fyneTest.NewApp()
+	defer app.Quit()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	status := widget.NewLabel("Downloading update…")
+	cancelButton := widget.NewButton("Cancel", nil)
+	if err := enterInstallingState(ctx, status, cancelButton); !errors.Is(err, context.Canceled) {
+		t.Fatalf("enterInstallingState error = %v, want context.Canceled", err)
+	}
+	if status.Text != "Downloading update…" {
+		t.Fatalf("status = %q, want download status", status.Text)
+	}
+	if cancelButton.Disabled() {
+		t.Fatal("cancel button should remain enabled when installation transition is rejected")
 	}
 }
 

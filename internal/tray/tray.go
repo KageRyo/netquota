@@ -353,10 +353,11 @@ func (u *ui) downloadAndInstall(release updateapp.Release) {
 			return
 		}
 
-		fyne.DoAndWait(func() {
-			status.SetText("Installing update…")
-			cancelButton.Disable()
-		})
+		if err := enterInstallingState(ctx, status, cancelButton); err != nil {
+			_ = os.RemoveAll(updateDirectory)
+			u.finishUpdateDownload(progressDialog, release, cancel, err)
+			return
+		}
 		installErr := updateapp.Install(context.Background(), path, u.executable)
 		if runtime.GOOS != "windows" || installErr != nil {
 			_ = os.RemoveAll(updateDirectory)
@@ -371,6 +372,19 @@ func (u *ui) downloadAndInstall(release updateapp.Release) {
 			u.application.Quit()
 		})
 	}()
+}
+
+func enterInstallingState(ctx context.Context, status *widget.Label, cancelButton *widget.Button) error {
+	var transitionErr error
+	fyne.DoAndWait(func() {
+		if err := ctx.Err(); err != nil {
+			transitionErr = err
+			return
+		}
+		status.SetText("Installing update…")
+		cancelButton.Disable()
+	})
+	return transitionErr
 }
 
 func (u *ui) finishUpdateDownload(progressDialog *dialog.CustomDialog, release updateapp.Release, cancel context.CancelFunc, err error) {
