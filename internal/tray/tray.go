@@ -32,6 +32,7 @@ import (
 )
 
 func Run(ctx context.Context, monitor *monitorapp.Monitor, executable string) {
+	_ = updateapp.CleanupStaleDownloads()
 	application := fyneapp.NewWithID("com.kageryo.netquota")
 	application.SetIcon(fyne.NewStaticResource("icon.svg", assets.IconSVG()))
 	window := application.NewWindow("NetQuota")
@@ -327,7 +328,7 @@ func (u *ui) downloadAndInstall(release updateapp.Release) {
 	progressDialog.Show()
 
 	go func() {
-		updateDirectory, err := os.MkdirTemp("", "netquota-update-*")
+		updateDirectory, err := updateapp.NewDownloadDirectory()
 		if err != nil {
 			u.finishUpdateDownload(progressDialog, release, cancel, fmt.Errorf("prepare update directory: %w", err))
 			return
