@@ -191,7 +191,7 @@ See [docs/design.md](docs/design.md) for the component boundaries and data model
 
 ## Versioning and license
 
-The current development release is **NetQuota v0.1.0-alpha.2**. Releases use semantic version numbers such as `v0.1.0`, with pre-release tags such as `v0.1.0-alpha.2`.
+Releases use semantic version numbers such as `v0.1.0`, with pre-release tags such as `v0.1.0-alpha.2`. See the [GitHub Releases](https://github.com/KageRyo/netquota/releases) page for the current release; the badge at the top of this README is kept in sync automatically.
 
 NetQuota is released under the [MIT License](LICENSE).
 
