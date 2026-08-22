@@ -5,7 +5,7 @@
 </div>
 
 [![CI](https://github.com/KageRyo/netquota/actions/workflows/ci.yml/badge.svg)](https://github.com/KageRyo/netquota/actions/workflows/ci.yml)
-[![Latest release](https://img.shields.io/github/v/release/KageRyo/netquota?display_name=tag&include_prereleases=true&sort=semver)](https://github.com/KageRyo/netquota/releases)
+[![Latest release](https://img.shields.io/github/v/release/KageRyo/netquota?display_name=tag&sort=semver)](https://github.com/KageRyo/netquota/releases)
 [![Go Reference](https://pkg.go.dev/badge/github.com/KageRyo/netquota.svg)](https://pkg.go.dev/github.com/KageRyo/netquota)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
