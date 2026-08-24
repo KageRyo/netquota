@@ -1,7 +1,6 @@
 package format
 
 import (
-	"errors"
 	"fmt"
 	"math"
 	"sort"
@@ -9,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/KageRyo/netquota/internal/config"
+	"github.com/KageRyo/netquota/internal/i18n"
 )
 
 var units = []string{"B", "KiB", "MiB", "GiB", "TiB", "PiB"}
@@ -36,13 +36,13 @@ func Quota(value uint64) string {
 func ParseGiB(input string) (uint64, error) {
 	value, err := strconv.ParseFloat(strings.TrimSpace(input), 64)
 	if err != nil || math.IsNaN(value) || math.IsInf(value, 0) {
-		return 0, errors.New("quota must be a number of GiB")
+		return 0, i18n.NewError("error.quota_not_number", nil)
 	}
 	if value < 0 {
-		return 0, errors.New("quota cannot be negative")
+		return 0, i18n.NewError("error.quota_negative", nil)
 	}
 	if value > float64(^uint64(0))/float64(config.BytesPerGiB) {
-		return 0, errors.New("quota is too large")
+		return 0, i18n.NewError("error.quota_too_large", nil)
 	}
 	return uint64(math.Round(value * float64(config.BytesPerGiB))), nil
 }
@@ -57,14 +57,14 @@ func ParsePercentages(input string) ([]uint8, error) {
 	for _, part := range parts {
 		value, err := strconv.ParseUint(strings.TrimSpace(part), 10, 8)
 		if err != nil || value == 0 || value > 100 {
-			return nil, errors.New("alert thresholds must be whole percentages from 1 to 100")
+			return nil, i18n.NewError("error.alert_invalid", nil)
 		}
 		result = append(result, uint8(value))
 	}
 	sort.Slice(result, func(i, j int) bool { return result[i] < result[j] })
 	for index := 1; index < len(result); index++ {
 		if result[index] == result[index-1] {
-			return nil, errors.New("alert thresholds cannot contain duplicates")
+			return nil, i18n.NewError("error.alert_duplicates", nil)
 		}
 	}
 	return result, nil

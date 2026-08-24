@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/KageRyo/netquota/internal/i18n"
 	"github.com/KageRyo/netquota/internal/model"
 	"github.com/KageRyo/netquota/internal/network"
 )
@@ -128,6 +129,39 @@ func TestMonitorChangingInterfaceStartsNewBaseline(t *testing.T) {
 	}
 	if !result.Baseline || result.Usage != (model.Usage{}) {
 		t.Fatalf("sample after interface change = %+v", result)
+	}
+}
+
+func TestMonitorLocalizesQuotaNotifications(t *testing.T) {
+	t.Parallel()
+
+	cfg := model.Config{
+		Version:             model.ConfigVersion,
+		Language:            i18n.TraditionalChinese,
+		PollIntervalSeconds: 1,
+		Quotas: model.Quotas{
+			Total: model.Limit{Bytes: 100, AlertPercentages: []uint8{70}},
+		},
+		Notifications: model.NotificationConfig{Enabled: true},
+	}
+	provider := &fakeProvider{interfaces: []network.Interface{{Name: "Ethernet"}}}
+	notifier := &fakeNotifier{}
+	monitor := NewMonitor(cfg, model.State{}, provider, nil, nil, notifier, quietLogger())
+	when := time.Date(2026, 8, 21, 8, 0, 0, 0, time.Local)
+	provider.counters = network.Counters{DownloadBytes: 1}
+	if _, err := monitor.Sample(context.Background(), when); err != nil {
+		t.Fatalf("baseline sample: %v", err)
+	}
+	provider.counters = network.Counters{DownloadBytes: 71}
+	if _, err := monitor.Sample(context.Background(), when.Add(time.Minute)); err != nil {
+		t.Fatalf("alert sample: %v", err)
+	}
+	if len(notifier.notifications) != 1 {
+		t.Fatalf("notifications = %d, want 1", len(notifier.notifications))
+	}
+	got := notifier.notifications[0]
+	if got.title != "NetQuota 流量上限警示" || got.message != "總流量已達 70%（70 B / 100 B）" {
+		t.Fatalf("notification = (%q, %q)", got.title, got.message)
 	}
 }
 

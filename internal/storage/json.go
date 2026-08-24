@@ -29,6 +29,7 @@ func (s Store) LoadConfig() (model.Config, error) {
 }
 
 func (s Store) SaveConfig(cfg model.Config) error {
+	cfg = config.WithDefaults(cfg)
 	if err := config.Validate(cfg); err != nil {
 		return fmt.Errorf("validate config: %w", err)
 	}

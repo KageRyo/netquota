@@ -9,6 +9,7 @@ import (
 
 	"github.com/KageRyo/netquota/internal/config"
 	"github.com/KageRyo/netquota/internal/format"
+	"github.com/KageRyo/netquota/internal/i18n"
 	"github.com/KageRyo/netquota/internal/model"
 	"github.com/KageRyo/netquota/internal/network"
 	"github.com/KageRyo/netquota/internal/notify"
@@ -87,6 +88,7 @@ func (m *Monitor) Interfaces(ctx context.Context) ([]network.Interface, error) {
 }
 
 func (m *Monitor) SetConfig(cfg model.Config) error {
+	cfg = config.WithDefaults(cfg)
 	if err := config.Validate(cfg); err != nil {
 		return err
 	}
@@ -152,8 +154,14 @@ func (m *Monitor) Sample(ctx context.Context, now time.Time) (Sample, error) {
 		if !m.cfg.Notifications.Enabled {
 			continue
 		}
-		message := fmt.Sprintf("%s reached %d%% (%s of %s)", dimensionName(alert.Dimension), alert.Percentage, format.Bytes(alert.UsedBytes), format.Bytes(alert.LimitBytes))
-		if err := m.notifier.Notify("NetQuota quota warning", message); err != nil {
+		translator := i18n.New(m.cfg.Language)
+		message := translator.Text("notification.quota_reached", map[string]any{
+			"Dimension":  dimensionName(translator, alert.Dimension),
+			"Percentage": alert.Percentage,
+			"Used":       format.Bytes(alert.UsedBytes),
+			"Limit":      format.Bytes(alert.LimitBytes),
+		})
+		if err := m.notifier.Notify(translator.Text("notification.quota_warning"), message); err != nil {
 			m.logger.Warn("send quota notification", "error", err, "dimension", alert.Dimension, "percentage", alert.Percentage)
 		}
 	}
@@ -170,14 +178,14 @@ func (m *Monitor) Sample(ctx context.Context, now time.Time) (Sample, error) {
 	}, nil
 }
 
-func dimensionName(dimension quota.Dimension) string {
+func dimensionName(translator i18n.Translator, dimension quota.Dimension) string {
 	switch dimension {
 	case quota.Total:
-		return "Total usage"
+		return translator.Text("notification.total_usage")
 	case quota.Download:
-		return "Download usage"
+		return translator.Text("notification.download_usage")
 	case quota.Upload:
-		return "Upload usage"
+		return translator.Text("notification.upload_usage")
 	default:
 		return string(dimension)
 	}

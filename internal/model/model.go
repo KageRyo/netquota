@@ -1,7 +1,11 @@
 // Package model contains the data shared by NetQuota's core, storage, and UI.
 package model
 
-import "time"
+import (
+	"time"
+
+	"github.com/KageRyo/netquota/internal/i18n"
+)
 
 const (
 	ConfigVersion = 1
@@ -36,6 +40,7 @@ type NotificationConfig struct {
 
 type Config struct {
 	Version             int                `json:"version"`
+	Language            i18n.Language      `json:"language"`
 	Interface           InterfaceSelection `json:"interface"`
 	Quotas              Quotas             `json:"quotas"`
 	PollIntervalSeconds int                `json:"poll_interval_seconds"`

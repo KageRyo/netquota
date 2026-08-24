@@ -3,6 +3,7 @@ package config
 import (
 	"testing"
 
+	"github.com/KageRyo/netquota/internal/i18n"
 	"github.com/KageRyo/netquota/internal/model"
 )
 
@@ -15,6 +16,9 @@ func TestDefaultConfigIsValid(t *testing.T) {
 	}
 	if cfg.Quotas.Total.Bytes != 100*BytesPerGiB {
 		t.Fatalf("default total quota = %d, want %d", cfg.Quotas.Total.Bytes, 100*BytesPerGiB)
+	}
+	if cfg.Language != i18n.English {
+		t.Fatalf("default language = %q, want %q", cfg.Language, i18n.English)
 	}
 }
 
@@ -43,6 +47,25 @@ func TestValidateRejectsUnsortedThresholds(t *testing.T) {
 	cfg.Quotas.Total.AlertPercentages = []uint8{95, 70}
 	if err := Validate(cfg); err == nil {
 		t.Fatal("Validate accepted unsorted alert thresholds")
+	}
+}
+
+func TestWithDefaultsAddsEnglishToExistingConfig(t *testing.T) {
+	t.Parallel()
+
+	cfg := WithDefaults(model.Config{Version: model.ConfigVersion, PollIntervalSeconds: 2})
+	if cfg.Language != i18n.English {
+		t.Fatalf("language = %q, want %q", cfg.Language, i18n.English)
+	}
+}
+
+func TestValidateRejectsUnsupportedLanguage(t *testing.T) {
+	t.Parallel()
+
+	cfg := Default()
+	cfg.Language = "fr"
+	if err := Validate(cfg); err == nil {
+		t.Fatal("Validate accepted an unsupported language")
 	}
 }
 

@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/KageRyo/netquota/internal/i18n"
 	"github.com/KageRyo/netquota/internal/model"
 )
 
@@ -19,7 +20,8 @@ var defaultAlertPercentages = []uint8{70, 85, 95, 100}
 
 func Default() model.Config {
 	return model.Config{
-		Version: model.ConfigVersion,
+		Version:  model.ConfigVersion,
+		Language: i18n.English,
 		Quotas: model.Quotas{
 			Total: model.Limit{
 				Bytes:            DefaultTotalQuotaGiB * BytesPerGiB,
@@ -39,6 +41,9 @@ func WithDefaults(cfg model.Config) model.Config {
 	defaults := Default()
 	if cfg.Version == 0 {
 		cfg.Version = defaults.Version
+	}
+	if cfg.Language == "" {
+		cfg.Language = defaults.Language
 	}
 	if cfg.PollIntervalSeconds == 0 {
 		cfg.PollIntervalSeconds = defaults.PollIntervalSeconds
@@ -61,6 +66,9 @@ func Validate(cfg model.Config) error {
 	}
 	if cfg.PollIntervalSeconds < 1 || cfg.PollIntervalSeconds > 24*60*60 {
 		return errors.New("poll_interval_seconds must be between 1 and 86400")
+	}
+	if cfg.Language != "" && !cfg.Language.Valid() {
+		return i18n.NewError("error.language_invalid", nil)
 	}
 	if err := validateLimit("total", cfg.Quotas.Total); err != nil {
 		return err
