@@ -323,19 +323,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Download Windows package
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: netquota-windows-amd64
           path: dist
 
       - name: Download Windows installer
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: netquota-windows-amd64-installer
           path: dist
 
       - name: Download Linux package
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: netquota-linux-amd64
           path: dist
@@ -410,7 +410,7 @@ jobs:
     runs-on: windows-latest
     steps:
       - name: Download release assets
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: release-assets
           path: dist
@@ -503,7 +503,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Download release assets
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: release-assets
           path: dist
@@ -545,7 +545,7 @@ jobs:
       id-token: write
     steps:
       - name: Download release assets
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: release-assets
           path: dist
@@ -571,7 +571,7 @@ jobs:
       attestations: read
     steps:
       - name: Download release assets
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: release-assets
           path: dist
@@ -598,7 +598,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Download release assets
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: release-assets
           path: dist
