@@ -16,6 +16,8 @@ jobs:
   build-windows:
     name: Build Windows release
     runs-on: windows-latest
+    outputs:
+      windows-signing-status: ${{ steps.build-package.outputs.windows-signing-status }}
     steps:
       - name: Check out source
         uses: actions/checkout@v5
@@ -51,6 +53,7 @@ jobs:
           git diff --exit-code -- assets/icon-256.png assets/windows/icon.ico
 
       - name: Build Windows package
+        id: build-package
         shell: pwsh
         env:
           RELEASE_TAG: ${{ inputs.tag }}
@@ -116,6 +119,7 @@ jobs:
 
           $hasCertificate = -not [string]::IsNullOrWhiteSpace($env:WINDOWS_SIGNING_CERTIFICATE_BASE64)
           $hasPassword = -not [string]::IsNullOrWhiteSpace($env:WINDOWS_SIGNING_CERTIFICATE_PASSWORD)
+          $signingStatus = "unsigned"
           if ($hasCertificate -xor $hasPassword) {
             throw "Both WINDOWS_SIGNING_CERTIFICATE_BASE64 and WINDOWS_SIGNING_CERTIFICATE_PASSWORD are required for code signing."
           }
@@ -205,10 +209,12 @@ jobs:
             Sign-Binary $installer
             Verify-Binary $installer
             Write-Host "Windows installer was Authenticode-signed."
+            $signingStatus = "signed"
           }
 
           Remove-Item -LiteralPath "$staging\LICENSE.txt" -Force
           Compress-Archive -Path "$staging\*" -DestinationPath "netquota-windows-amd64.zip" -Force
+          Add-Content -LiteralPath $env:GITHUB_OUTPUT -Value "windows-signing-status=$signingStatus"
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v6
@@ -263,6 +269,9 @@ jobs:
       - name: Run unit tests
         run: go test ./...
 
+      - name: Run vulnerability scan
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.7.0 ./...
+
       - name: Verify generated icon assets
         shell: bash
         run: |
@@ -308,8 +317,8 @@ jobs:
           path: netquota-linux-amd64.tar.gz
           if-no-files-found: error
 
-  create-draft-release:
-    name: Create draft release
+  prepare-release-assets:
+    name: Prepare release assets
     needs: [build-windows, build-linux]
     runs-on: ubuntu-latest
     steps:
@@ -331,10 +340,23 @@ jobs:
           name: netquota-linux-amd64
           path: dist
 
-      - name: Generate release checksums
+      - name: Generate checksums and verification metadata
         shell: bash
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+          RELEASE_TARGET: ${{ github.sha }}
+          WINDOWS_SIGNING_STATUS: ${{ needs.build-windows.outputs.windows-signing-status }}
         run: |
           set -euo pipefail
+
+          if [[ ! "$RELEASE_TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$ ]]; then
+            echo "tag must use the SemVer form vX.Y.Z or vX.Y.Z-prerelease" >&2
+            exit 1
+          fi
+          if [[ "$WINDOWS_SIGNING_STATUS" != "signed" && "$WINDOWS_SIGNING_STATUS" != "unsigned" ]]; then
+            echo "unexpected Windows signing status: $WINDOWS_SIGNING_STATUS" >&2
+            exit 1
+          fi
           (
             cd dist
             sha256sum \
@@ -342,7 +364,266 @@ jobs:
               netquota-windows-amd64-setup.exe \
               netquota-linux-amd64.tar.gz \
               > SHA256SUMS
+            sha256sum --check --strict SHA256SUMS
           )
+
+          jq -n \
+            --arg tag "$RELEASE_TAG" \
+            --arg commit "$RELEASE_TARGET" \
+            --arg repository "$GITHUB_REPOSITORY" \
+            --arg signing "$WINDOWS_SIGNING_STATUS" \
+            '{
+              schema_version: 1,
+              tag_name: $tag,
+              target_commitish: $commit,
+              repository: $repository,
+              windows_authenticode: $signing,
+              provenance: {
+                provider: "GitHub Artifact Attestations",
+                predicate_type: "https://slsa.dev/provenance/v1",
+                verification: "gh attestation verify <artifact> --repo " + $repository
+              }
+            }' > dist/RELEASE-METADATA.json
+
+          jq -e \
+            --arg tag "$RELEASE_TAG" \
+            --arg commit "$RELEASE_TARGET" \
+            --arg repository "$GITHUB_REPOSITORY" \
+            '.schema_version == 1 and .tag_name == $tag and .target_commitish == $commit and .repository == $repository and (.windows_authenticode == "signed" or .windows_authenticode == "unsigned") and .provenance.provider == "GitHub Artifact Attestations" and .provenance.predicate_type == "https://slsa.dev/provenance/v1"' \
+            dist/RELEASE-METADATA.json
+
+      - name: Upload prepared release assets
+        uses: actions/upload-artifact@v6
+        with:
+          name: release-assets
+          path: |
+            dist/netquota-windows-amd64.zip
+            dist/netquota-windows-amd64-setup.exe
+            dist/netquota-linux-amd64.tar.gz
+            dist/SHA256SUMS
+            dist/RELEASE-METADATA.json
+          if-no-files-found: error
+
+  smoke-test-windows:
+    name: Smoke test Windows release package
+    needs: [prepare-release-assets]
+    runs-on: windows-latest
+    steps:
+      - name: Download release assets
+        uses: actions/download-artifact@v7
+        with:
+          name: release-assets
+          path: dist
+
+      - name: Verify and exercise Windows packages
+        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+          RELEASE_TARGET: ${{ github.sha }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          $dist = (Resolve-Path "dist").Path
+          $requiredAssets = @(
+            "netquota-windows-amd64.zip",
+            "netquota-windows-amd64-setup.exe",
+            "netquota-linux-amd64.tar.gz"
+          )
+          $expectedHashes = @{}
+          foreach ($line in Get-Content "$dist\SHA256SUMS") {
+            if ($line -notmatch '^(?<hash>[a-fA-F0-9]{64})\s+\*?(?<name>.+)$') {
+              throw "invalid SHA256SUMS line: $line"
+            }
+            $expectedHashes[$Matches.name] = $Matches.hash.ToLowerInvariant()
+          }
+          foreach ($asset in $requiredAssets) {
+            if (-not $expectedHashes.ContainsKey($asset)) {
+              throw "SHA256SUMS is missing $asset"
+            }
+            $actual = (Get-FileHash -Algorithm SHA256 -LiteralPath "$dist\$asset").Hash.ToLowerInvariant()
+            if ($actual -ne $expectedHashes[$asset]) {
+              throw "checksum mismatch for $asset"
+            }
+          }
+
+          $metadata = Get-Content "$dist\RELEASE-METADATA.json" -Raw | ConvertFrom-Json
+          if ($metadata.schema_version -ne 1 -or $metadata.tag_name -ne $env:RELEASE_TAG -or $metadata.target_commitish -ne $env:RELEASE_TARGET) {
+            throw "release metadata does not match this release"
+          }
+          if ($metadata.provenance.provider -ne "GitHub Artifact Attestations" -or $metadata.provenance.predicate_type -ne "https://slsa.dev/provenance/v1") {
+            throw "release metadata has invalid provenance fields"
+          }
+          if ($metadata.windows_authenticode -notin @("signed", "unsigned")) {
+            throw "release metadata has invalid Windows signing status"
+          }
+
+          $portable = Join-Path $env:RUNNER_TEMP "netquota-portable-smoke"
+          Expand-Archive -LiteralPath "$dist\netquota-windows-amd64.zip" -DestinationPath $portable -Force
+          $portableConsole = Join-Path $portable "netquota-console.exe"
+          $portableGUI = Join-Path $portable "netquota.exe"
+          if (-not (Test-Path -LiteralPath $portableConsole) -or -not (Test-Path -LiteralPath $portableGUI)) {
+            throw "portable archive is missing an executable"
+          }
+          $portableVersion = & $portableConsole --version
+          if ($LASTEXITCODE -ne 0 -or $portableVersion -ne "NetQuota $env:RELEASE_TAG") {
+            throw "portable console version is $portableVersion"
+          }
+
+          $installDir = Join-Path $env:RUNNER_TEMP "netquota-installer-smoke"
+          try {
+            $installerArguments = "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /LANG=english /DIR=`"$installDir`""
+            $installer = Start-Process -FilePath "$dist\netquota-windows-amd64-setup.exe" -ArgumentList $installerArguments -Wait -PassThru
+            if ($installer.ExitCode -ne 0) {
+              throw "installer exited with $($installer.ExitCode)"
+            }
+            $installedConsole = Join-Path $installDir "netquota-console.exe"
+            $installedGUI = Join-Path $installDir "netquota.exe"
+            if (-not (Test-Path -LiteralPath $installedConsole) -or -not (Test-Path -LiteralPath $installedGUI)) {
+              throw "installed package is missing an executable"
+            }
+            $installedVersion = & $installedConsole --version
+            if ($LASTEXITCODE -ne 0 -or $installedVersion -ne "NetQuota $env:RELEASE_TAG") {
+              throw "installed console version is $installedVersion"
+            }
+            $uninstaller = Get-ChildItem -LiteralPath $installDir -Filter "unins*.exe" | Select-Object -First 1
+            if ($null -eq $uninstaller) {
+              throw "installer did not create an uninstaller"
+            }
+            $uninstall = Start-Process -FilePath $uninstaller.FullName -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART" -Wait -PassThru
+            if ($uninstall.ExitCode -ne 0 -or (Test-Path -LiteralPath $installedGUI)) {
+              throw "uninstaller did not remove NetQuota"
+            }
+          } finally {
+            Remove-Item -LiteralPath $portable -Recurse -Force -ErrorAction SilentlyContinue
+            Remove-Item -LiteralPath $installDir -Recurse -Force -ErrorAction SilentlyContinue
+          }
+
+  smoke-test-linux:
+    name: Smoke test Linux release package
+    needs: [prepare-release-assets]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download release assets
+        uses: actions/download-artifact@v7
+        with:
+          name: release-assets
+          path: dist
+
+      - name: Verify and exercise Linux package
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+          RELEASE_TARGET: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          (
+            cd dist
+            sha256sum --check --strict SHA256SUMS
+          )
+          jq -e \
+            --arg tag "$RELEASE_TAG" \
+            --arg commit "$RELEASE_TARGET" \
+            '.schema_version == 1 and .tag_name == $tag and .target_commitish == $commit and .provenance.provider == "GitHub Artifact Attestations" and .provenance.predicate_type == "https://slsa.dev/provenance/v1" and (.windows_authenticode == "signed" or .windows_authenticode == "unsigned")' \
+            dist/RELEASE-METADATA.json
+
+          temporary_dir="$(mktemp -d)"
+          trap 'rm -rf "$temporary_dir"' EXIT
+          tar -xzf dist/netquota-linux-amd64.tar.gz -C "$temporary_dir"
+          package_dir="$temporary_dir/netquota-linux-amd64"
+          for file in netquota README.md LICENSE PRIVACY.md icon-256.png NotoSansCJK-OFL.txt; do
+            test -f "$package_dir/$file"
+          done
+          test -x "$package_dir/netquota"
+          test "$("$package_dir/netquota" --version)" = "NetQuota $RELEASE_TAG"
+
+  attest-release-assets:
+    name: Attest release assets
+    needs: [prepare-release-assets]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      attestations: write
+      id-token: write
+    steps:
+      - name: Download release assets
+        uses: actions/download-artifact@v7
+        with:
+          name: release-assets
+          path: dist
+
+      - name: Attest release packages
+        uses: actions/attest-build-provenance@v3
+        with:
+          subject-checksums: dist/SHA256SUMS
+
+      - name: Attest release verification files
+        uses: actions/attest-build-provenance@v3
+        with:
+          subject-path: |
+            dist/SHA256SUMS
+            dist/RELEASE-METADATA.json
+
+  verify-release-provenance:
+    name: Verify release provenance
+    needs: [prepare-release-assets, attest-release-assets]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      attestations: read
+    steps:
+      - name: Download release assets
+        uses: actions/download-artifact@v7
+        with:
+          name: release-assets
+          path: dist
+
+      - name: Verify every attestation
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh attestation verify --help >/dev/null
+          for artifact in \
+            netquota-windows-amd64.zip \
+            netquota-windows-amd64-setup.exe \
+            netquota-linux-amd64.tar.gz \
+            SHA256SUMS \
+            RELEASE-METADATA.json; do
+            gh attestation verify "dist/$artifact" --repo "$GITHUB_REPOSITORY"
+          done
+
+  create-draft-release:
+    name: Create draft release
+    needs: [build-windows, prepare-release-assets, smoke-test-windows, smoke-test-linux, verify-release-provenance]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download release assets
+        uses: actions/download-artifact@v7
+        with:
+          name: release-assets
+          path: dist
+
+      - name: Write release notes
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+          RELEASE_TARGET: ${{ github.sha }}
+          WINDOWS_SIGNING_STATUS: ${{ needs.build-windows.outputs.windows-signing-status }}
+        run: |
+          set -euo pipefail
+          cat > release-notes.md <<EOF
+          ## Build verification
+
+          - Windows Authenticode signing: **$WINDOWS_SIGNING_STATUS**
+          - GitHub Artifact Attestations cover every release package, \`SHA256SUMS\`, and \`RELEASE-METADATA.json\`.
+          - Verify a downloaded file with \`gh attestation verify <artifact> --repo $GITHUB_REPOSITORY\`.
+
+          EOF
+          gh api --method POST "repos/$GITHUB_REPOSITORY/releases/generate-notes" \
+            -f tag_name="$RELEASE_TAG" \
+            -f target_commitish="$RELEASE_TARGET" \
+            --jq '.body' >> release-notes.md
 
       - name: Create or update draft release
         shell: bash
@@ -365,7 +646,7 @@ jobs:
               echo "refusing to modify a published release: $RELEASE_TAG" >&2
               exit 1
             fi
-            release_edit_args=(--draft --target "$RELEASE_TARGET")
+            release_edit_args=(--draft --target "$RELEASE_TARGET" --title "NetQuota $RELEASE_TAG" --notes-file release-notes.md)
             if [[ "$RELEASE_TAG" == *-* ]]; then
               release_edit_args+=(--prerelease)
             fi
@@ -375,13 +656,14 @@ jobs:
               dist/netquota-windows-amd64-setup.exe \
               dist/netquota-linux-amd64.tar.gz \
               dist/SHA256SUMS \
+              dist/RELEASE-METADATA.json \
               --clobber
           else
             release_create_args=(
               --draft
               --target "$RELEASE_TARGET"
               --title "NetQuota $RELEASE_TAG"
-              --generate-notes
+              --notes-file release-notes.md
             )
             if [[ "$RELEASE_TAG" == *-* ]]; then
               release_create_args+=(--prerelease)
@@ -391,6 +673,7 @@ jobs:
               dist/netquota-windows-amd64-setup.exe \
               dist/netquota-linux-amd64.tar.gz \
               dist/SHA256SUMS \
+              dist/RELEASE-METADATA.json \
               "${release_create_args[@]}"
           fi
 

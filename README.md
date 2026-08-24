@@ -54,6 +54,14 @@ Each release includes a `SHA256SUMS` manifest for the Windows installer,
 Windows portable ZIP, and Linux archive. Download it from the same release if
 you need to verify an artifact before installing it.
 
+Releases also include `RELEASE-METADATA.json` and signed GitHub Artifact
+Attestations. With the GitHub CLI, you can verify the build provenance of a
+downloaded artifact:
+
+```sh
+gh attestation verify netquota-linux-amd64.tar.gz --repo KageRyo/netquota
+```
+
 ## First run
 
 1. Open **Settings** from the tray menu.

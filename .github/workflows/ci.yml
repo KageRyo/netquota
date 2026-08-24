@@ -58,6 +58,10 @@ jobs:
       - name: Run unit tests
         run: go test ./...
 
+      - name: Run vulnerability scan
+        if: runner.os == 'Linux'
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.7.0 ./...
+
       - name: Prepare Windows icon resource
         if: runner.os == 'Windows'
         shell: pwsh

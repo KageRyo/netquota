@@ -12,9 +12,35 @@ From WSL, start the manual workflow:
 gh workflow run draft-release.yml --ref main -f tag=v0.1.0-alpha.3
 ```
 
-The workflow runs checks on `windows-latest` and `ubuntu-latest`, embeds the generated Windows ICO into the GUI executable with `go-winres`, builds the GUI and console binaries for Windows, builds the Linux amd64 portable archive, generates a `SHA256SUMS` manifest, and creates or updates a GitHub draft release with all four release assets. The maintainer should install the draft Windows installer and run the Linux archive on real machines before publishing the release.
+The workflow runs checks on `windows-latest` and `ubuntu-latest`, including
+`govulncheck`, embeds the generated Windows ICO into the GUI executable with
+`go-winres`, and builds Windows and Linux packages. It then verifies the
+checksums and release metadata, installs and uninstalls the Windows package in
+a temporary directory, exercises the portable Windows and Linux CLI binaries,
+and creates a draft release only after every automated check passes. The
+maintainer should still install the draft Windows installer and run the Linux
+archive on real machines before publishing the release.
 
 `SHA256SUMS` is required by the in-app updater. Do not publish a release with a missing or stale manifest: it must contain the hashes of `netquota-windows-amd64.zip`, `netquota-windows-amd64-setup.exe`, and `netquota-linux-amd64.tar.gz`.
+
+## Artifact provenance
+
+The release workflow produces GitHub Artifact Attestations with short-lived
+Sigstore certificates for every distributable package, `SHA256SUMS`, and
+`RELEASE-METADATA.json`. It cryptographically verifies those attestations
+before it creates the draft release; a missing or invalid attestation fails the
+workflow.
+
+`RELEASE-METADATA.json` records the release tag, source commit, provenance
+predicate, repository, and whether the Windows artifacts are Authenticode
+signed. The release notes repeat the signing status so an unsigned release is
+never described as signed.
+
+To independently verify a downloaded artifact, use a current GitHub CLI:
+
+```sh
+gh attestation verify netquota-windows-amd64-setup.exe --repo KageRyo/netquota
+```
 
 The Windows GUI executable, installer, Start Menu shortcut, optional desktop shortcut, and uninstaller all use the generated `assets/windows/icon.ico`. The ICO is regenerated from `assets/icon.svg` by `make icons`; CI fails if the committed derived files are stale.
 
