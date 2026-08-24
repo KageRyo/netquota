@@ -192,6 +192,7 @@ jobs:
 
           Copy-Item README.md, LICENSE, PRIVACY.md, assets\windows\icon.ico $staging
           Copy-Item LICENSE "$staging\LICENSE.txt"
+          Copy-Item assets\fonts\OFL.txt "$staging\NotoSansCJK-OFL.txt"
           $sourceDir = (Resolve-Path $staging).Path
           $iscc = (Get-Command iscc.exe -ErrorAction Stop).Source
           & $iscc "/DAppVersion=$releaseVersion" "/DAppBinaryVersion=$releaseCoreVersion" "/DSourceDir=$sourceDir" "/Orelease" .\packaging\windows\netquota.iss
@@ -297,6 +298,7 @@ jobs:
           mkdir -p "$staging"
           go build -trimpath -ldflags "-s -w $version_ldflag" -o "$staging/netquota" ./cmd/netquota
           cp README.md LICENSE PRIVACY.md assets/icon-256.png "$staging/"
+          cp assets/fonts/OFL.txt "$staging/NotoSansCJK-OFL.txt"
           tar -C release -czf netquota-linux-amd64.tar.gz netquota-linux-amd64
 
       - name: Upload Linux package

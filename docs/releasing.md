@@ -18,7 +18,7 @@ The workflow runs checks on `windows-latest` and `ubuntu-latest`, embeds the gen
 
 The Windows GUI executable, installer, Start Menu shortcut, optional desktop shortcut, and uninstaller all use the generated `assets/windows/icon.ico`. The ICO is regenerated from `assets/icon.svg` by `make icons`; CI fails if the committed derived files are stale.
 
-The Linux artifact is `netquota-linux-amd64.tar.gz`. It contains the `netquota` GUI/CLI binary, project documentation, and `icon-256.png`; it requires the Linux desktop libraries listed in the README and is intentionally a portable tarball rather than a distro-specific package.
+The Linux artifact is `netquota-linux-amd64.tar.gz`. It contains the `netquota` GUI/CLI binary, project documentation, `icon-256.png`, and `NotoSansCJK-OFL.txt` for the embedded CJK fonts; it requires the Linux desktop libraries listed in the README and is intentionally a portable tarball rather than a distro-specific package.
 
 The installer shows the repository's `LICENSE` file and requires the user to accept it before continuing. This is an installer consent step; the project remains available under the MIT License.
 
@@ -66,6 +66,8 @@ Do not publish a draft until the Windows and Linux real-machine checks are compl
 - the GUI executable, installer, and shortcuts display the NetQuota icon;
 - the Linux archive starts after its documented desktop dependencies are installed;
 - the tray menu shows total, download, and upload usage;
+- the installer can be completed in English, 正體中文, and 日本語, and 正體中文 is labelled exactly that way;
+- 正體中文 and 日本語 render without missing-glyph boxes in the application and installer;
 - the installer and portable package contain the same release version;
 - the application can be uninstalled cleanly; and
 - signing has been verified, or the release is explicitly labeled as unsigned.

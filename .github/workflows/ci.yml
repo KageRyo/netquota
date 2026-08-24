@@ -86,6 +86,33 @@ jobs:
       - name: Build application
         run: go build -trimpath ./cmd/netquota
 
+      - name: Compile localized Windows installer
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $staging = "release-ci\netquota-windows-amd64"
+          New-Item -ItemType Directory -Force $staging | Out-Null
+          go build -trimpath -tags migrated_fynedo -ldflags "-H=windowsgui" -o "$staging\netquota.exe" .\cmd\netquota
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
+          go build -trimpath -tags migrated_fynedo -o "$staging\netquota-console.exe" .\cmd\netquota
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
+          Copy-Item README.md, LICENSE, PRIVACY.md, assets\windows\icon.ico $staging
+          Copy-Item LICENSE "$staging\LICENSE.txt"
+          Copy-Item assets\fonts\OFL.txt "$staging\NotoSansCJK-OFL.txt"
+          $sourceDir = (Resolve-Path $staging).Path
+          $iscc = (Get-Command iscc.exe -ErrorAction Stop).Source
+          & $iscc "/DAppVersion=0.0.0" "/DAppBinaryVersion=0.0.0" "/DSourceDir=$sourceDir" "/Orelease-ci" .\packaging\windows\netquota.iss
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
+          if (-not (Test-Path -LiteralPath "release-ci\netquota-windows-amd64-setup.exe")) {
+            throw "Inno Setup did not produce the localized installer."
+          }
+
       - name: Clean Windows icon resource
         if: always() && runner.os == 'Windows'
         shell: pwsh

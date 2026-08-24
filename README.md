@@ -86,7 +86,7 @@ The Windows portable archive contains two binaries:
 - `netquota.exe` is the tray application built with the Windows GUI subsystem, so launching it does not open a console window.
 - `netquota-console.exe` is the console-enabled build for `--version`, `--list-interfaces`, `--once`, `--headless`, and diagnostics.
 
-Extract the archive and run `netquota.exe` on a Windows machine for the portable option. The `netquota-windows-amd64-setup.exe` installer displays the MIT License and requires acceptance before installing the same two binaries for the current Windows user, creates a Start Menu shortcut, and registers an uninstaller. The Settings page's start-on-login option only registers the selected executable to launch with the user session; it is separate from installation.
+Extract the archive and run `netquota.exe` on a Windows machine for the portable option. The `netquota-windows-amd64-setup.exe` installer displays the MIT License and requires acceptance before installing the same two binaries for the current Windows user, creates a Start Menu shortcut, and registers an uninstaller. Its setup language can be selected as English, 正體中文, or 日本語. The Settings page's start-on-login option only registers the selected executable to launch with the user session; it is separate from installation.
 
 Both Windows distributions check published GitHub releases in the background. Stable builds consider stable releases only; alpha, beta, and release-candidate builds can also see newer pre-releases. When a newer version is available, the tray menu shows `Update available: vX.Y.Z`; selecting it asks for confirmation, downloads the installer, verifies its SHA-256 checksum, and starts the installer. NetQuota removes updater temporary directories older than 24 hours when it starts. If the release does not provide a compatible or verifiable package, NetQuota opens the release page instead. Updates are user-confirmed rather than silently replacing a running executable. Draft releases are not considered updates until a maintainer publishes them.
 
@@ -115,6 +115,7 @@ The generated configuration follows this shape:
 ```json
 {
   "version": 1,
+  "language": "en",
   "interface": {
     "name": "Ethernet",
     "hardware_address": "00:11:22:33:44:55",
@@ -143,6 +144,15 @@ The generated configuration follows this shape:
 ```
 
 JSON quota values use bytes. The Settings page uses binary GiB (`1 GiB = 1024³ bytes`). Alert percentages must be whole numbers from 1 to 100, in ascending order. A quota can be enabled with a different threshold list from the other two quotas.
+
+## Language
+
+NetQuota's Settings page lets each user choose `English`, `正體中文`, or `日本語`.
+The choice is saved in `config.json` and is independent of the Windows
+installer language. Existing configuration files without a `language` field
+default to English when they are next loaded and saved. The application embeds
+Noto CJK fonts for 正體中文 and 日本語 so the portable Linux build does not depend
+on host CJK font packages.
 
 ## How accounting works
 

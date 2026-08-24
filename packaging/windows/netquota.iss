@@ -45,9 +45,25 @@ VersionInfoTextVersion={#AppVersion}
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
+Name: "chinesetraditional"; MessagesFile: "compiler:Languages\ChineseTraditional.isl"
+Name: "japanese"; MessagesFile: "compiler:Languages\Japanese.isl"
+
+[LangOptions]
+chinesetraditional.LanguageName=正體中文
+
+[CustomMessages]
+english.CreateDesktopShortcut=Create a desktop shortcut
+chinesetraditional.CreateDesktopShortcut=建立桌面捷徑
+japanese.CreateDesktopShortcut=デスクトップ ショートカットを作成する
+english.AdditionalIcons=Additional icons:
+chinesetraditional.AdditionalIcons=其他圖示：
+japanese.AdditionalIcons=追加アイコン：
+english.LaunchNetQuota=Launch NetQuota
+chinesetraditional.LaunchNetQuota=啟動 NetQuota
+japanese.LaunchNetQuota=NetQuota を起動
 
 [Tasks]
-Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Additional icons:"; Flags: unchecked
+Name: "desktopicon"; Description: "{cm:CreateDesktopShortcut}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Files]
 Source: "{#SourceDir}\netquota.exe"; DestDir: "{app}"; Flags: ignoreversion
@@ -56,10 +72,11 @@ Source: "{#SourceDir}\icon.ico"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#SourceDir}\README.md"; DestDir: "{app}"; Flags: isreadme
 Source: "{#SourceDir}\PRIVACY.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#SourceDir}\LICENSE.txt"; DestDir: "{app}"; DestName: "LICENSE"; Flags: ignoreversion
+Source: "{#SourceDir}\NotoSansCJK-OFL.txt"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{autoprograms}\NetQuota"; Filename: "{app}\netquota.exe"; WorkingDir: "{app}"; IconFilename: "{app}\icon.ico"; IconIndex: 0
 Name: "{autodesktop}\NetQuota"; Filename: "{app}\netquota.exe"; WorkingDir: "{app}"; IconFilename: "{app}\icon.ico"; IconIndex: 0; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\netquota.exe"; Description: "Launch NetQuota"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\netquota.exe"; Description: "{cm:LaunchNetQuota}"; Flags: nowait postinstall skipifsilent
