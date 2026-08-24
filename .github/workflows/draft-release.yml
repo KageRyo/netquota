@@ -381,7 +381,7 @@ jobs:
               provenance: {
                 provider: "GitHub Artifact Attestations",
                 predicate_type: "https://slsa.dev/provenance/v1",
-                verification: "gh attestation verify <artifact> --repo " + $repository
+                verification: ("gh attestation verify <artifact> --repo " + $repository)
               }
             }' > dist/RELEASE-METADATA.json
 
