@@ -23,6 +23,7 @@ import (
 	monitorapp "github.com/KageRyo/netquota/internal/app"
 	"github.com/KageRyo/netquota/internal/config"
 	"github.com/KageRyo/netquota/internal/format"
+	"github.com/KageRyo/netquota/internal/i18n"
 	"github.com/KageRyo/netquota/internal/model"
 	"github.com/KageRyo/netquota/internal/network"
 	"github.com/KageRyo/netquota/internal/quota"
@@ -43,10 +44,7 @@ func Run(ctx context.Context, monitor *monitorapp.Monitor, executable string) {
 
 	if desktopApp, ok := application.(desktop.App); ok {
 		desktopApp.SetSystemTrayIcon(fyne.NewStaticResource("icon-16.png", assets.TrayIconPNG()))
-		trayMenu := newTrayMenu(window, ui.showSettings, ui.checkForUpdates)
-		ui.trayMenu = trayMenu
-		desktopApp.SetSystemTrayMenu(trayMenu.menu)
-		desktopApp.SetSystemTrayWindow(window)
+		ui.setDesktopApp(desktopApp)
 	}
 
 	pollContext, cancel := context.WithCancel(ctx)
@@ -67,6 +65,7 @@ func Run(ctx context.Context, monitor *monitorapp.Monitor, executable string) {
 }
 
 type trayMenu struct {
+	translator   i18n.Translator
 	menu         *fyne.Menu
 	totalItem    *fyne.MenuItem
 	downloadItem *fyne.MenuItem
@@ -74,23 +73,24 @@ type trayMenu struct {
 	updateItem   *fyne.MenuItem
 }
 
-func newTrayMenu(window fyne.Window, showSettings, checkForUpdates func()) *trayMenu {
-	totalItem := newTrayMetricItem("Total")
-	downloadItem := newTrayMetricItem("Download")
-	uploadItem := newTrayMetricItem("Upload")
-	updateItem := fyne.NewMenuItem("Check for updates", checkForUpdates)
+func newTrayMenu(translator i18n.Translator, window fyne.Window, showSettings, checkForUpdates func()) *trayMenu {
+	totalItem := newTrayMetricItem(translator.Text("metric.total"))
+	downloadItem := newTrayMetricItem(translator.Text("metric.download"))
+	uploadItem := newTrayMetricItem(translator.Text("metric.upload"))
+	updateItem := fyne.NewMenuItem(translator.Text("tray.check_updates"), checkForUpdates)
 	menu := fyne.NewMenu("NetQuota",
 		totalItem,
 		downloadItem,
 		uploadItem,
 		fyne.NewMenuItemSeparator(),
-		fyne.NewMenuItem("Show window", func() {
+		fyne.NewMenuItem(translator.Text("tray.show_window"), func() {
 			window.Show()
 		}),
-		fyne.NewMenuItem("Settings", showSettings),
+		fyne.NewMenuItem(translator.Text("dashboard.settings"), showSettings),
 		updateItem,
 	)
 	return &trayMenu{
+		translator:   translator,
 		menu:         menu,
 		totalItem:    totalItem,
 		downloadItem: downloadItem,
@@ -106,35 +106,35 @@ func newTrayMetricItem(name string) *fyne.MenuItem {
 }
 
 func (m *trayMenu) update(status quota.Status) {
-	m.totalItem.Label = metricText("Total", status.Total.UsedBytes, status.Total)
-	m.downloadItem.Label = metricText("Download", status.Download.UsedBytes, status.Download)
-	m.uploadItem.Label = metricText("Upload", status.Upload.UsedBytes, status.Upload)
+	m.totalItem.Label = metricText(m.translator, "metric.total", status.Total.UsedBytes, status.Total)
+	m.downloadItem.Label = metricText(m.translator, "metric.download", status.Download.UsedBytes, status.Download)
+	m.uploadItem.Label = metricText(m.translator, "metric.upload", status.Upload.UsedBytes, status.Upload)
 	m.menu.Refresh()
 }
 
 func (m *trayMenu) setChecking() {
-	m.updateItem.Label = "Checking for updates…"
+	m.updateItem.Label = m.translator.Text("tray.checking_updates")
 	m.updateItem.Action = nil
 	m.updateItem.Disabled = true
 	m.menu.Refresh()
 }
 
 func (m *trayMenu) setReady(checkForUpdates func()) {
-	m.updateItem.Label = "Check for updates"
+	m.updateItem.Label = m.translator.Text("tray.check_updates")
 	m.updateItem.Action = checkForUpdates
 	m.updateItem.Disabled = false
 	m.menu.Refresh()
 }
 
 func (m *trayMenu) setUpdateAvailable(tag string, openRelease func()) {
-	m.updateItem.Label = "Update available: " + tag
+	m.updateItem.Label = m.translator.Text("tray.update_available", map[string]any{"Version": tag})
 	m.updateItem.Action = openRelease
 	m.updateItem.Disabled = false
 	m.menu.Refresh()
 }
 
 func (m *trayMenu) setUpdating() {
-	m.updateItem.Label = "Downloading update…"
+	m.updateItem.Label = m.translator.Text("tray.downloading_update")
 	m.updateItem.Action = nil
 	m.updateItem.Disabled = true
 	m.menu.Refresh()
@@ -145,6 +145,11 @@ type ui struct {
 	window      fyne.Window
 	monitor     *monitorapp.Monitor
 	executable  string
+	translator  i18n.Translator
+	desktopApp  desktop.App
+	baseTheme   fyne.Theme
+	lastSample  *monitorapp.Sample
+	lastError   error
 
 	interfaceLabel *widget.Label
 	statusLabel    *widget.Label
@@ -158,25 +163,54 @@ type ui struct {
 }
 
 func newUI(application fyne.App, window fyne.Window, monitor *monitorapp.Monitor, executable string) *ui {
-	return &ui{
+	ui := &ui{
 		application:    application,
 		window:         window,
 		monitor:        monitor,
 		executable:     executable,
-		interfaceLabel: widget.NewLabel("Interface: waiting for discovery"),
-		statusLabel:    widget.NewLabel("Waiting for the first sample…"),
-		updatedLabel:   widget.NewLabel("Last sample: —"),
-		downloadLabel:  widget.NewLabel("Download: —"),
-		uploadLabel:    widget.NewLabel("Upload: —"),
-		totalLabel:     widget.NewLabel("Total: —"),
-		remainingLabel: widget.NewLabel("Remaining: —"),
+		translator:     i18n.New(monitor.Config().Language),
+		baseTheme:      application.Settings().Theme(),
+		interfaceLabel: widget.NewLabel(""),
+		statusLabel:    widget.NewLabel(""),
+		updatedLabel:   widget.NewLabel(""),
+		downloadLabel:  widget.NewLabel(""),
+		uploadLabel:    widget.NewLabel(""),
+		totalLabel:     widget.NewLabel(""),
+		remainingLabel: widget.NewLabel(""),
 		updateChecker:  updateapp.NewChecker(),
 	}
+	applyLanguageTheme(application, ui.baseTheme, ui.translator.Language())
+	ui.refreshDashboardLabels()
+	return ui
+}
+
+func (u *ui) setDesktopApp(application desktop.App) {
+	u.desktopApp = application
+	u.resetTrayMenu()
+	application.SetSystemTrayWindow(u.window)
+}
+
+func (u *ui) resetTrayMenu() {
+	if u.desktopApp == nil {
+		return
+	}
+	u.trayMenu = newTrayMenu(u.translator, u.window, u.showSettings, u.checkForUpdates)
+	if u.lastSample != nil {
+		u.trayMenu.update(u.lastSample.Quota)
+	}
+	u.desktopApp.SetSystemTrayMenu(u.trayMenu.menu)
+}
+
+func (u *ui) setLanguage(language i18n.Language) {
+	u.translator = i18n.New(language)
+	applyLanguageTheme(u.application, u.baseTheme, u.translator.Language())
+	u.refreshDashboardLabels()
+	u.resetTrayMenu()
 }
 
 func (u *ui) dashboard() fyne.CanvasObject {
-	settingsButton := widget.NewButtonWithIcon("Settings", theme.SettingsIcon(), u.showSettings)
-	quitButton := widget.NewButtonWithIcon("Quit", theme.CancelIcon(), u.application.Quit)
+	settingsButton := widget.NewButtonWithIcon(u.translator.Text("dashboard.settings"), theme.SettingsIcon(), u.showSettings)
+	quitButton := widget.NewButtonWithIcon(u.translator.Text("dashboard.quit"), theme.CancelIcon(), u.application.Quit)
 	buttons := container.NewGridWithColumns(2, settingsButton, quitButton)
 	content := container.NewVBox(
 		widget.NewLabelWithStyle("NetQuota v"+version.Value, fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
@@ -217,27 +251,51 @@ func (u *ui) sample(ctx context.Context) {
 	sample, err := u.monitor.Sample(ctx, time.Now())
 	fyne.Do(func() {
 		if err != nil {
-			u.statusLabel.SetText("Error: " + err.Error())
-			u.statusLabel.Importance = widget.WarningImportance
-			u.statusLabel.Refresh()
+			u.lastSample = nil
+			u.lastError = i18n.WrapError("error.monitoring_failed", err, nil)
+			u.refreshDashboardLabels()
 			return
 		}
-		u.statusLabel.Importance = widget.MediumImportance
-		u.statusLabel.SetText("Monitoring active")
-		u.interfaceLabel.SetText(interfaceText(sample.Interface))
-		u.updatedLabel.SetText("Last sample: " + sample.At.Local().Format("15:04:05"))
-		u.downloadLabel.SetText(metricText("Download", sample.Usage.DownloadBytes, sample.Quota.Download))
-		u.uploadLabel.SetText(metricText("Upload", sample.Usage.UploadBytes, sample.Quota.Upload))
-		u.totalLabel.SetText(metricText("Total", sample.Quota.Total.UsedBytes, sample.Quota.Total))
-		if sample.Quota.Total.Enabled {
-			u.remainingLabel.SetText(fmt.Sprintf("Remaining: %s", format.Bytes(sample.Quota.Total.RemainingBytes)))
-		} else {
-			u.remainingLabel.SetText("Remaining: total quota disabled")
-		}
-		if u.trayMenu != nil {
-			u.trayMenu.update(sample.Quota)
-		}
+		u.lastSample = &sample
+		u.lastError = nil
+		u.refreshDashboardLabels()
 	})
+}
+
+func (u *ui) refreshDashboardLabels() {
+	if u.lastError != nil {
+		u.statusLabel.SetText(u.translator.Text("status.error", map[string]any{"Error": u.translator.ErrorText(u.lastError)}))
+		u.statusLabel.Importance = widget.WarningImportance
+		u.statusLabel.Refresh()
+		return
+	}
+	if u.lastSample == nil {
+		u.interfaceLabel.SetText(u.translator.Text("dashboard.interface.waiting"))
+		u.statusLabel.SetText(u.translator.Text("dashboard.waiting"))
+		u.statusLabel.Importance = widget.MediumImportance
+		u.updatedLabel.SetText(u.translator.Text("dashboard.last_sample.none"))
+		u.downloadLabel.SetText(u.translator.Text("dashboard.metric.download.none"))
+		u.uploadLabel.SetText(u.translator.Text("dashboard.metric.upload.none"))
+		u.totalLabel.SetText(u.translator.Text("dashboard.metric.total.none"))
+		u.remainingLabel.SetText(u.translator.Text("dashboard.remaining.none"))
+		return
+	}
+	sample := *u.lastSample
+	u.statusLabel.Importance = widget.MediumImportance
+	u.statusLabel.SetText(u.translator.Text("status.monitoring_active"))
+	u.interfaceLabel.SetText(interfaceText(u.translator, sample.Interface))
+	u.updatedLabel.SetText(u.translator.Text("status.last_sample", map[string]any{"Time": sample.At.Local().Format("15:04:05")}))
+	u.downloadLabel.SetText(metricText(u.translator, "metric.download", sample.Usage.DownloadBytes, sample.Quota.Download))
+	u.uploadLabel.SetText(metricText(u.translator, "metric.upload", sample.Usage.UploadBytes, sample.Quota.Upload))
+	u.totalLabel.SetText(metricText(u.translator, "metric.total", sample.Quota.Total.UsedBytes, sample.Quota.Total))
+	if sample.Quota.Total.Enabled {
+		u.remainingLabel.SetText(u.translator.Text("metric.remaining", map[string]any{"Bytes": format.Bytes(sample.Quota.Total.RemainingBytes)}))
+	} else {
+		u.remainingLabel.SetText(u.translator.Text("metric.remaining.disabled"))
+	}
+	if u.trayMenu != nil {
+		u.trayMenu.update(sample.Quota)
+	}
 }
 
 func (u *ui) checkForUpdates() {
@@ -246,6 +304,24 @@ func (u *ui) checkForUpdates() {
 
 func (u *ui) checkForUpdatesInBackground(ctx context.Context) {
 	u.startUpdateCheck(ctx, false)
+}
+
+func (u *ui) showError(err error) {
+	content := widget.NewLabel(u.translator.ErrorText(err))
+	content.Wrapping = fyne.TextWrapWord
+	dialog.NewCustom(u.translator.Text("app.error"), u.translator.Text("app.close"), content, u.window).Show()
+}
+
+func (u *ui) showInformation(title, message string) {
+	content := widget.NewLabel(message)
+	content.Wrapping = fyne.TextWrapWord
+	dialog.NewCustom(title, u.translator.Text("app.close"), content, u.window).Show()
+}
+
+func (u *ui) showConfirm(title, message string, callback func(bool)) {
+	content := widget.NewLabel(message)
+	content.Wrapping = fyne.TextWrapWord
+	dialog.NewCustomConfirm(title, u.translator.Text("app.confirm"), u.translator.Text("app.cancel"), content, callback, u.window).Show()
 }
 
 func (u *ui) startUpdateCheck(ctx context.Context, interactive bool) {
@@ -266,14 +342,14 @@ func (u *ui) startUpdateCheck(ctx context.Context, interactive bool) {
 			if err != nil {
 				u.trayMenu.setReady(u.checkForUpdates)
 				if interactive {
-					dialog.ShowError(fmt.Errorf("check for updates: %w", err), u.window)
+					u.showError(i18n.WrapError("update.check_failed", err, nil))
 				}
 				return
 			}
 			if !available {
 				u.trayMenu.setReady(u.checkForUpdates)
 				if interactive {
-					dialog.ShowInformation("NetQuota is up to date", "You are running NetQuota v"+version.Value+".", u.window)
+					u.showInformation(u.translator.Text("update.up_to_date.title"), u.translator.Text("update.up_to_date.message", map[string]any{"Version": version.Value}))
 				}
 				return
 			}
@@ -289,23 +365,23 @@ func (u *ui) startUpdateCheck(ctx context.Context, interactive bool) {
 
 func (u *ui) confirmUpdate(release updateapp.Release) {
 	if release.DownloadURL == "" {
-		dialog.ShowInformation("Update available", "NetQuota "+release.TagName+" is available on the release page, but no compatible package was published.", u.window)
+		u.showInformation(u.translator.Text("update.available.title"), u.translator.Text("update.available.no_package", map[string]any{"Version": release.TagName}))
 		u.openReleasePage(release)
 		return
 	}
 	if release.ChecksumURL == "" {
-		dialog.ShowConfirm("Open release page?", "This release does not include a checksum manifest, so NetQuota cannot install it automatically.", func(open bool) {
+		u.showConfirm(u.translator.Text("update.open_release.title"), u.translator.Text("update.open_release.no_checksum"), func(open bool) {
 			if open {
 				u.openReleasePage(release)
 			}
-		}, u.window)
+		})
 		return
 	}
-	dialog.ShowConfirm("Install update?", "Download and install NetQuota "+release.TagName+" now? The application will restart after installation.", func(confirmed bool) {
+	u.showConfirm(u.translator.Text("update.install.title"), u.translator.Text("update.install.message", map[string]any{"Version": release.TagName}), func(confirmed bool) {
 		if confirmed {
 			u.downloadAndInstall(release)
 		}
-	}, u.window)
+	})
 }
 
 func (u *ui) downloadAndInstall(release updateapp.Release) {
@@ -315,11 +391,11 @@ func (u *ui) downloadAndInstall(release updateapp.Release) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	progress := widget.NewProgressBar()
-	status := widget.NewLabel("Preparing download…")
+	status := widget.NewLabel(u.translator.Text("update.preparing_download"))
 	content := container.NewVBox(status, progress)
 	var progressDialog *dialog.CustomDialog
-	progressDialog = dialog.NewCustomWithoutButtons("Downloading NetQuota update", content, u.window)
-	cancelButton := widget.NewButton("Cancel", func() {
+	progressDialog = dialog.NewCustomWithoutButtons(u.translator.Text("update.downloading.title"), content, u.window)
+	cancelButton := widget.NewButton(u.translator.Text("app.cancel"), func() {
 		cancel()
 		progressDialog.Hide()
 		u.restoreUpdateAction(release)
@@ -330,16 +406,16 @@ func (u *ui) downloadAndInstall(release updateapp.Release) {
 	go func() {
 		updateDirectory, err := updateapp.NewDownloadDirectory()
 		if err != nil {
-			u.finishUpdateDownload(progressDialog, release, cancel, fmt.Errorf("prepare update directory: %w", err))
+			u.finishUpdateDownload(progressDialog, release, cancel, i18n.WrapError("update.prepare_failed", err, nil))
 			return
 		}
 		path, err := u.updateChecker.Download(ctx, release, updateDirectory, func(written, total int64) {
 			fyne.Do(func() {
 				if total > 0 {
 					progress.SetValue(float64(written) / float64(total))
-					status.SetText(fmt.Sprintf("Downloaded %s of %s", format.Bytes(uint64(written)), format.Bytes(uint64(total))))
+					status.SetText(u.translator.Text("update.downloaded", map[string]any{"Written": format.Bytes(uint64(written)), "Total": format.Bytes(uint64(total))}))
 				} else {
-					status.SetText("Downloaded " + format.Bytes(uint64(written)))
+					status.SetText(u.translator.Text("update.downloaded_unknown_total", map[string]any{"Written": format.Bytes(uint64(written))}))
 				}
 			})
 		})
@@ -354,7 +430,7 @@ func (u *ui) downloadAndInstall(release updateapp.Release) {
 			return
 		}
 
-		if err := enterInstallingState(ctx, status, cancelButton); err != nil {
+		if err := enterInstallingState(ctx, status, cancelButton, u.translator); err != nil {
 			_ = os.RemoveAll(updateDirectory)
 			u.finishUpdateDownload(progressDialog, release, cancel, err)
 			return
@@ -375,14 +451,14 @@ func (u *ui) downloadAndInstall(release updateapp.Release) {
 	}()
 }
 
-func enterInstallingState(ctx context.Context, status *widget.Label, cancelButton *widget.Button) error {
+func enterInstallingState(ctx context.Context, status *widget.Label, cancelButton *widget.Button, translator i18n.Translator) error {
 	var transitionErr error
 	fyne.DoAndWait(func() {
 		if err := ctx.Err(); err != nil {
 			transitionErr = err
 			return
 		}
-		status.SetText("Installing update…")
+		status.SetText(translator.Text("update.installing"))
 		cancelButton.Disable()
 	})
 	return transitionErr
@@ -398,14 +474,14 @@ func (u *ui) finishUpdateDownload(progressDialog *dialog.CustomDialog, release u
 		}
 		u.restoreUpdateAction(release)
 		if errors.Is(err, updateapp.ErrUnsupportedPlatform) || errors.Is(err, os.ErrPermission) {
-			dialog.ShowConfirm("Automatic update unavailable", err.Error()+" Open the release page instead?", func(open bool) {
+			u.showConfirm(u.translator.Text("update.automatic_unavailable.title"), u.translator.Text("update.automatic_unavailable.message", map[string]any{"Error": u.translator.ErrorText(err)}), func(open bool) {
 				if open {
 					u.openReleasePage(release)
 				}
-			}, u.window)
+			})
 			return
 		}
-		dialog.ShowError(err, u.window)
+		u.showError(i18n.WrapError("update.install_failed", err, nil))
 	})
 }
 
@@ -421,11 +497,11 @@ func (u *ui) restoreUpdateAction(release updateapp.Release) {
 func (u *ui) openReleasePage(release updateapp.Release) {
 	parsed, err := releasePageURL(release)
 	if err != nil {
-		dialog.ShowError(fmt.Errorf("open update: %w", err), u.window)
+		u.showError(i18n.WrapError("update.open_failed", err, nil))
 		return
 	}
 	if err := u.application.OpenURL(parsed); err != nil {
-		dialog.ShowError(fmt.Errorf("open update: %w", err), u.window)
+		u.showError(i18n.WrapError("update.open_failed", err, nil))
 	}
 }
 
@@ -444,7 +520,7 @@ func (u *ui) showSettings() {
 	cfg := u.monitor.Config()
 	interfaces, err := u.monitor.Interfaces(context.Background())
 	if err != nil {
-		dialog.ShowError(err, u.window)
+		u.showError(i18n.WrapError("settings.load_interfaces_failed", err, nil))
 		return
 	}
 	options := make([]string, 0, len(interfaces))
@@ -454,10 +530,12 @@ func (u *ui) showSettings() {
 		byName[iface.Name] = iface
 	}
 	interfaceSelect := widget.NewSelect(options, nil)
-	interfaceSelect.PlaceHolder = "Choose an interface"
+	interfaceSelect.PlaceHolder = u.translator.Text("settings.choose_interface")
 	if cfg.Interface.Name != "" {
 		interfaceSelect.SetSelected(cfg.Interface.Name)
 	}
+	languageSelect := widget.NewSelect(i18n.DisplayNames(), nil)
+	languageSelect.SetSelected(i18n.DisplayName(cfg.Language))
 
 	totalQuota := widget.NewEntry()
 	downloadQuota := widget.NewEntry()
@@ -471,47 +549,50 @@ func (u *ui) showSettings() {
 	totalThresholds.SetText(thresholdString(cfg.Quotas.Total.AlertPercentages))
 	downloadThresholds.SetText(thresholdString(cfg.Quotas.Download.AlertPercentages))
 	uploadThresholds.SetText(thresholdString(cfg.Quotas.Upload.AlertPercentages))
-	notifications := widget.NewCheck("Desktop notifications", nil)
+	notifications := widget.NewCheck(u.translator.Text("settings.desktop_notifications"), nil)
 	notifications.SetChecked(cfg.Notifications.Enabled)
-	startOnLogin := widget.NewCheck("Start with the user session", nil)
+	startOnLogin := widget.NewCheck(u.translator.Text("settings.start_on_login"), nil)
 	startOnLogin.SetChecked(cfg.StartOnLogin)
 
 	form := widget.NewForm()
-	form.SubmitText = "Save settings"
-	form.CancelText = "Cancel"
-	form.Append("Network interface", interfaceSelect)
-	form.Append("Total quota (GiB)", totalQuota)
-	form.Append("Total alerts (%)", totalThresholds)
-	form.Append("Download quota (GiB)", downloadQuota)
-	form.Append("Download alerts (%)", downloadThresholds)
-	form.Append("Upload quota (GiB)", uploadQuota)
-	form.Append("Upload alerts (%)", uploadThresholds)
-	form.Append("Notifications", notifications)
-	form.Append("Startup", startOnLogin)
+	form.SubmitText = u.translator.Text("settings.save")
+	form.CancelText = u.translator.Text("app.cancel")
+	form.Append(u.translator.Text("settings.language"), languageSelect)
+	form.Append(u.translator.Text("settings.network_interface"), interfaceSelect)
+	form.Append(u.translator.Text("settings.total_quota"), totalQuota)
+	form.Append(u.translator.Text("settings.total_alerts"), totalThresholds)
+	form.Append(u.translator.Text("settings.download_quota"), downloadQuota)
+	form.Append(u.translator.Text("settings.download_alerts"), downloadThresholds)
+	form.Append(u.translator.Text("settings.upload_quota"), uploadQuota)
+	form.Append(u.translator.Text("settings.upload_alerts"), uploadThresholds)
+	form.Append(u.translator.Text("settings.notifications"), notifications)
+	form.Append(u.translator.Text("settings.startup"), startOnLogin)
 	form.OnCancel = func() { u.window.SetContent(u.dashboard()) }
 	form.OnSubmit = func() {
-		updated, err := readSettings(cfg, interfaceSelect, byName, totalQuota, totalThresholds, downloadQuota, downloadThresholds, uploadQuota, uploadThresholds, notifications, startOnLogin)
+		updated, err := readSettings(cfg, languageSelect, interfaceSelect, byName, totalQuota, totalThresholds, downloadQuota, downloadThresholds, uploadQuota, uploadThresholds, notifications, startOnLogin)
 		if err != nil {
-			dialog.ShowError(err, u.window)
+			u.showError(err)
 			return
 		}
 		if err := u.monitor.SetConfig(updated); err != nil {
-			dialog.ShowError(err, u.window)
+			u.showError(i18n.WrapError("settings.save_failed", err, nil))
 			return
 		}
 		if err := startup.Configure(updated.StartOnLogin, u.executable); err != nil {
-			dialog.ShowError(err, u.window)
+			u.showError(i18n.WrapError("settings.startup_failed", err, nil))
 			return
 		}
+		u.setLanguage(updated.Language)
 		u.window.SetContent(u.dashboard())
 	}
-	back := widget.NewButtonWithIcon("Back", theme.NavigateBackIcon(), func() { u.window.SetContent(u.dashboard()) })
+	back := widget.NewButtonWithIcon(u.translator.Text("app.back"), theme.NavigateBackIcon(), func() { u.window.SetContent(u.dashboard()) })
 	u.window.SetContent(container.NewBorder(back, nil, nil, nil, container.NewVScroll(form)))
 	u.window.Show()
 }
 
 func readSettings(
 	cfg model.Config,
+	languageSelect,
 	interfaceSelect *widget.Select,
 	byName map[string]network.Interface,
 	totalQuota, totalThresholds,
@@ -520,14 +601,19 @@ func readSettings(
 	notifications, startOnLogin *widget.Check,
 ) (model.Config, error) {
 	var err error
+	language, ok := i18n.ParseDisplayName(languageSelect.Selected)
+	if !ok {
+		return model.Config{}, i18n.NewError("error.language_invalid", nil)
+	}
+	cfg.Language = language
 	if cfg.Quotas.Total, err = parseLimit(totalQuota.Text, totalThresholds.Text); err != nil {
-		return model.Config{}, fmt.Errorf("total quota: %w", err)
+		return model.Config{}, i18n.WrapError("error.settings.total_quota", err, nil)
 	}
 	if cfg.Quotas.Download, err = parseLimit(downloadQuota.Text, downloadThresholds.Text); err != nil {
-		return model.Config{}, fmt.Errorf("download quota: %w", err)
+		return model.Config{}, i18n.WrapError("error.settings.download_quota", err, nil)
 	}
 	if cfg.Quotas.Upload, err = parseLimit(uploadQuota.Text, uploadThresholds.Text); err != nil {
-		return model.Config{}, fmt.Errorf("upload quota: %w", err)
+		return model.Config{}, i18n.WrapError("error.settings.upload_quota", err, nil)
 	}
 	if selected, ok := byName[interfaceSelect.Selected]; ok {
 		cfg.Interface = model.InterfaceSelection{
@@ -553,18 +639,24 @@ func parseLimit(quotaInput, thresholdInput string) (model.Limit, error) {
 	return model.Limit{Bytes: bytes, AlertPercentages: thresholds}, nil
 }
 
-func interfaceText(iface network.Interface) string {
+func interfaceText(translator i18n.Translator, iface network.Interface) string {
 	if iface.IPv4 == "" {
-		return "Interface: " + iface.Name
+		return translator.Text("metric.interface", map[string]any{"Name": iface.Name})
 	}
-	return fmt.Sprintf("Interface: %s (%s)", iface.Name, iface.IPv4)
+	return translator.Text("metric.interface_ipv4", map[string]any{"Name": iface.Name, "IPv4": iface.IPv4})
 }
 
-func metricText(name string, used uint64, metric quota.MetricStatus) string {
+func metricText(translator i18n.Translator, nameKey string, used uint64, metric quota.MetricStatus) string {
+	name := translator.Text(nameKey)
 	if !metric.Enabled {
-		return fmt.Sprintf("%s: %s (limit disabled)", name, format.Bytes(used))
+		return translator.Text("metric.disabled", map[string]any{"Name": name, "Used": format.Bytes(used)})
 	}
-	return fmt.Sprintf("%s: %s / %s (%s)", name, format.Bytes(used), format.Bytes(metric.LimitBytes), format.Percent(metric.Percent))
+	return translator.Text("metric.enabled", map[string]any{
+		"Name":    name,
+		"Used":    format.Bytes(used),
+		"Limit":   format.Bytes(metric.LimitBytes),
+		"Percent": format.Percent(metric.Percent),
+	})
 }
 
 func gibString(value uint64) string {

@@ -30,6 +30,28 @@ func TestTrayIconPNGIsEmbedded(t *testing.T) {
 	}
 }
 
+func TestCJKFontsAreEmbedded(t *testing.T) {
+	for name, font := range map[string][]byte{
+		"Traditional Chinese": TraditionalChineseFont(),
+		"Japanese":            JapaneseFont(),
+	} {
+		if len(font) < 1<<20 {
+			t.Fatalf("%s font is unexpectedly small: %d bytes", name, len(font))
+		}
+		if got := string(font[:4]); got != "OTTO" {
+			t.Fatalf("%s font signature = %q, want OpenType CFF signature", name, got)
+		}
+	}
+
+	license, err := os.ReadFile("fonts/OFL.txt")
+	if err != nil {
+		t.Fatalf("read bundled font license: %v", err)
+	}
+	if !strings.Contains(string(license), "SIL OPEN FONT LICENSE") {
+		t.Fatal("bundled font license is not the SIL Open Font License")
+	}
+}
+
 func TestPackagingPNGIsGeneratedAtHighResolution(t *testing.T) {
 	file, err := os.Open("icon-256.png")
 	if err != nil {
