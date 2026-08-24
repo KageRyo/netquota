@@ -1,208 +1,144 @@
 <div align="center">
   <img src="assets/icon.svg" alt="NetQuota icon" width="128" height="128">
   <h1>NetQuota</h1>
-  <p>Monitor daily network usage from your system tray and get warned before a quota is reached.</p>
+  <p>A private, local daily network-usage monitor for your system tray.</p>
+  <p>
+    <a href="https://github.com/KageRyo/netquota/releases/latest">Download the latest release</a>
+    ·
+    <a href="#install">Install</a>
+    ·
+    <a href="https://github.com/KageRyo/netquota/issues">Report an issue</a>
+  </p>
 </div>
 
 [![CI](https://github.com/KageRyo/netquota/actions/workflows/ci.yml/badge.svg)](https://github.com/KageRyo/netquota/actions/workflows/ci.yml)
 [![Latest release](https://img.shields.io/github/v/release/KageRyo/netquota?display_name=tag&sort=semver)](https://github.com/KageRyo/netquota/releases)
-[![Go Reference](https://pkg.go.dev/badge/github.com/KageRyo/netquota.svg)](https://pkg.go.dev/github.com/KageRyo/netquota)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-NetQuota is a lightweight cross-platform system-tray application that tracks daily network usage on a selected interface and warns before a configurable traffic quota is reached.
+NetQuota tracks the traffic reported by one network interface, keeps daily
+download and upload totals on your device, and warns you before a quota is
+reached. It is designed for people who want a lightweight desktop reminder—not
+a network-management service, packet inspector, or cloud account.
 
-It measures the operating system's cumulative interface counters, keeps the daily download and upload totals locally, and exposes three independently configurable limits:
+## Install
 
-- total traffic (`download + upload`)
-- download traffic
-- upload traffic
+### Windows (x64)
 
-Each enabled limit has its own notification percentages. A limit of `0` disables that dimension.
+1. Download [the Windows installer](https://github.com/KageRyo/netquota/releases/latest/download/netquota-windows-amd64-setup.exe).
+2. Run it and follow the setup wizard. The installer is available in English,
+   正體中文, and 日本語.
+3. Open NetQuota from the Start menu. It will appear in the system tray.
 
-## Features
+The installer creates an uninstaller and can optionally create a desktop
+shortcut. A portable ZIP is also available on the
+[release page](https://github.com/KageRyo/netquota/releases/latest).
 
-- Windows and Linux desktop tray application built with Go and Fyne
-- Branded application, system-tray, and quota-warning notification icons
-- Select an interface by name, hardware address, and IPv4 identity
-- Daily download, upload, and total usage
-- Adjustable total, download, and upload quotas
-- Independent alert percentages for every enabled quota
-- Desktop notifications with one notification per threshold per day
-- Local-time day rollover, including after sleep or hibernation
-- Counter reset detection after reboot or interface reconnect
-- Atomic JSON persistence for configuration and daily state
-- Optional start-on-login setup for Windows and Linux
-- User-confirmed, checksum-verified updates for supported Windows and Linux releases
-- CLI inspection mode for troubleshooting without opening the tray
+### Linux (amd64)
 
-## Quick start
+1. Download [the Linux portable archive](https://github.com/KageRyo/netquota/releases/latest/download/netquota-linux-amd64.tar.gz).
+2. Extract it and run the application:
 
-Go 1.26 or newer is required. On Linux, Fyne needs the desktop development libraries used by the CI workflow:
+   ```sh
+   tar -xzf netquota-linux-amd64.tar.gz
+   cd netquota-linux-amd64
+   ./netquota
+   ```
+
+NetQuota is a portable archive, not a `.deb`, AppImage, or distribution
+repository package. It needs a normal Linux desktop environment with the
+OpenGL/EGL, Wayland or X11 runtime libraries that Fyne uses.
+
+### Verify a download
+
+Each release includes a `SHA256SUMS` manifest for the Windows installer,
+Windows portable ZIP, and Linux archive. Download it from the same release if
+you need to verify an artifact before installing it.
+
+## First run
+
+1. Open **Settings** from the tray menu.
+2. Select the network interface to monitor.
+3. Set total, download, and upload quotas in GiB. Set a limit to `0` to
+   disable it.
+4. Choose alert percentages and, if you want, enable start-on-login.
+
+The first successful sample creates the day's baseline. NetQuota cannot infer
+traffic that happened before that baseline, so give yourself a little margin
+below an externally enforced quota.
+
+## Highlights
+
+- Daily total, download, and upload accounting
+- Independent quotas and notification thresholds for each direction
+- Local-time daily rollover, including after sleep or hibernation
+- Counter-reset detection after a reboot or interface reconnect
+- Optional start-on-login on Windows and Linux
+- User-confirmed updates with downloaded-artifact checksum verification
+- English, 正體中文, and 日本語 interfaces with bundled CJK fonts
+- CLI modes for diagnostics and headless monitoring
+
+## Languages and privacy
+
+Choose `English`, `正體中文`, or `日本語` in Settings at any time. The application
+language is saved separately from the Windows installer language.
+
+Usage data and settings stay in per-user local configuration files. NetQuota
+does not inspect packets, upload your usage data, require administrator/root
+privileges, throttle traffic, or block connections. It does check GitHub for
+new published releases; see the [privacy policy](PRIVACY.md) for details.
+
+## What NetQuota measures
+
+NetQuota reads the operating system's cumulative receive and send counters for
+the selected interface. It is useful for personal awareness, but it is not an
+authoritative record from an ISP, school, gateway, or network administrator.
+
+It tracks one selected interface at a time. Traffic through a different
+adapter, VPN, or device is not included unless that interface is selected.
+
+## Command line
+
+The graphical app is the normal way to use NetQuota. The same binary also
+provides a few commands for troubleshooting and automation:
+
+```sh
+netquota --version
+netquota --list-interfaces
+netquota --once
+netquota --headless
+```
+
+Use `--config` and `--state` to provide custom paths when diagnosing a setup.
+Run `netquota --help` to see every option.
+
+## Build from source
+
+Go 1.26 or newer is required. On Debian/Ubuntu-based Linux systems, install
+the desktop development libraries Fyne needs before building:
 
 ```sh
 sudo apt-get update
 sudo apt-get install -y libgl1-mesa-dev libegl1-mesa-dev libgles2-mesa-dev libwayland-dev libxkbcommon-dev libxkbcommon-x11-dev xorg-dev
 ```
 
-Run the tray application from a checkout:
+Then run or build NetQuota:
 
 ```sh
 go run ./cmd/netquota
-```
-
-Useful CLI modes:
-
-```sh
-go run ./cmd/netquota --list-interfaces
-go run ./cmd/netquota --once
-go run ./cmd/netquota --headless
-go run ./cmd/netquota --install-startup
-go run ./cmd/netquota --uninstall-startup
-```
-
-Build a local binary:
-
-```sh
-mkdir -p bin
 go build -trimpath -o bin/netquota ./cmd/netquota
 ```
 
-The tray window's Settings page lets you select the interface, change each quota in GiB, edit each threshold list, enable notifications, and configure start-on-login.
+For the full contributor workflow, required checks, and pull-request process,
+see [CONTRIBUTING.md](CONTRIBUTING.md).
 
-## Draft release builds
+## Project information
 
-WSL can run the tests and trigger the release workflow, but it cannot run the Windows system tray UI itself. Maintainers can trigger the manual [`draft-release.yml`](.github/workflows/draft-release.yml) workflow from WSL:
+- [Report a bug or request a feature](https://github.com/KageRyo/netquota/issues)
+- [Roadmap milestones](https://github.com/KageRyo/netquota/milestones)
+- [Security policy](SECURITY.md)
+- [Architecture notes](docs/design.md)
+- [Maintainer release guide](docs/releasing.md)
 
-```sh
-gh workflow run draft-release.yml --ref main -f tag=v0.1.0-alpha.3
-```
+## License
 
-The workflow runs formatting, vet, and unit tests on both `windows-latest` and `ubuntu-latest`, then attaches Windows portable/installer artifacts, a Linux portable archive, and `SHA256SUMS` to a GitHub draft release.
-
-### Windows
-
-The Windows portable archive contains two binaries:
-
-- `netquota.exe` is the tray application built with the Windows GUI subsystem, so launching it does not open a console window.
-- `netquota-console.exe` is the console-enabled build for `--version`, `--list-interfaces`, `--once`, `--headless`, and diagnostics.
-
-Extract the archive and run `netquota.exe` on a Windows machine for the portable option. The `netquota-windows-amd64-setup.exe` installer displays the MIT License and requires acceptance before installing the same two binaries for the current Windows user, creates a Start Menu shortcut, and registers an uninstaller. Its setup language can be selected as English, 正體中文, or 日本語. The Settings page's start-on-login option only registers the selected executable to launch with the user session; it is separate from installation.
-
-Both Windows distributions check published GitHub releases in the background. Stable builds consider stable releases only; alpha, beta, and release-candidate builds can also see newer pre-releases. When a newer version is available, the tray menu shows `Update available: vX.Y.Z`; selecting it asks for confirmation, downloads the installer, verifies its SHA-256 checksum, and starts the installer. NetQuota removes updater temporary directories older than 24 hours when it starts. If the release does not provide a compatible or verifiable package, NetQuota opens the release page instead. Updates are user-confirmed rather than silently replacing a running executable. Draft releases are not considered updates until a maintainer publishes them.
-
-### Linux
-
-The Linux artifact is `netquota-linux-amd64.tar.gz`. It contains one GUI/CLI binary named `netquota`, the project documentation, and the high-resolution application icon. The same binary supports the tray UI and CLI modes such as `--version`, `--list-interfaces`, `--once`, and `--headless`.
-
-Install the Linux desktop libraries listed in [Quick start](#quick-start), extract the archive, and run `./netquota`. This is a portable amd64 archive rather than a distro-specific `.deb`, AppImage, or repository package.
-
-Linux builds also check published GitHub releases in the background; when a newer version is available, the tray menu asks for confirmation, downloads the matching archive, verifies its SHA-256 checksum, replaces the portable binary atomically, and restarts NetQuota. This requires the extracted application directory to be writable; otherwise the release page is offered as a fallback. Updates are user-confirmed rather than silently replacing a running executable.
-
-Windows release artifacts are unsigned unless the repository's signing secrets are configured. See [docs/releasing.md](docs/releasing.md) for the code-signing procedure and the draft-release gate.
-
-A draft is not published until a maintainer explicitly publishes it.
-
-## Configuration
-
-NetQuota creates `config.json` and `state.json` below the platform's per-user configuration directory. The exact location is reported by the platform; it is never stored in the repository. Custom paths can be supplied for diagnostics:
-
-```sh
-go run ./cmd/netquota --config ./config.json --state ./state.json --once
-```
-
-The generated configuration follows this shape:
-
-```json
-{
-  "version": 1,
-  "language": "en",
-  "interface": {
-    "name": "Ethernet",
-    "hardware_address": "00:11:22:33:44:55",
-    "ipv4": "192.0.2.10"
-  },
-  "quotas": {
-    "total": {
-      "bytes": 107374182400,
-      "alert_percentages": [70, 85, 95, 100]
-    },
-    "download": {
-      "bytes": 0,
-      "alert_percentages": []
-    },
-    "upload": {
-      "bytes": 0,
-      "alert_percentages": []
-    }
-  },
-  "poll_interval_seconds": 2,
-  "notifications": {
-    "enabled": true
-  },
-  "start_on_login": false
-}
-```
-
-JSON quota values use bytes. The Settings page uses binary GiB (`1 GiB = 1024³ bytes`). Alert percentages must be whole numbers from 1 to 100, in ascending order. A quota can be enabled with a different threshold list from the other two quotas.
-
-## Language
-
-NetQuota's Settings page lets each user choose `English`, `正體中文`, or `日本語`.
-The choice is saved in `config.json` and is independent of the Windows
-installer language. Existing configuration files without a `language` field
-default to English when they are next loaded and saved. The application embeds
-Noto CJK fonts for 正體中文 and 日本語 so the portable Linux build does not depend
-on host CJK font packages.
-
-## How accounting works
-
-On every sample NetQuota reads the selected interface's cumulative receive and send counters through [gopsutil](https://github.com/shirou/gopsutil):
-
-```text
-current counter - previous counter = sample delta
-daily download/upload total + sample delta = current usage
-```
-
-When no valid baseline exists for the current day, the first sample establishes one. Traffic that occurred before that baseline cannot be reconstructed. If an operating-system counter becomes smaller than the previous value, NetQuota treats it as a reset and does not add a negative delta. When the local calendar date changes, the next sample starts a new daily baseline, so sleep and hibernation do not depend on a timer firing at midnight.
-
-## Important limitation
-
-NetQuota reports the local operating system's interface counters. It is an estimate of the traffic visible to this machine, not an authoritative counter from a school gateway, ISP, switch, or other network administrator. Keep a safety margin below any externally enforced quota.
-
-> **Daily accounting limitation:** NetQuota cannot reconstruct traffic that happened before the first valid counter baseline for the current day. This includes traffic used before the first launch of that day, or traffic after the saved state or operating-system counters were reset. If a valid baseline was persisted and the counters remain monotonic, traffic that occurs while NetQuota is closed may still be included on the next sample.
-
-NetQuota does not inspect packets, require administrator/root privileges, measure traffic per process, shape bandwidth, block network access, or upload usage data to a server.
-
-## Development
-
-The project keeps accounting logic independent from the tray UI:
-
-```text
-network provider → usage tracker → quota evaluator
-                         ├──────→ JSON state
-                         ├──────→ desktop notification
-                         └──────→ CLI / system tray
-```
-
-The application embeds the canonical assets from [`assets/`](assets/): the SVG is used for the application and window identity, while the 16px PNG is used for system-tray and desktop notification surfaces. The generated 256px PNG and multi-size Windows ICO are used by packaging tools; [`FyneApp.toml`](FyneApp.toml) points to the high-resolution PNG.
-
-Run the same checks used by CI:
-
-```sh
-gofmt -w .
-go vet ./...
-go test ./...
-go build ./cmd/netquota
-```
-
-New behavior should include focused unit tests. The test suite covers baselines, counter resets, local-date rollover, overflow handling, independent limits, alert de-duplication, persistence, monitor integration, and Settings parsing.
-
-See [docs/design.md](docs/design.md) for the component boundaries and data model. Contributions are welcome; [CONTRIBUTING.md](CONTRIBUTING.md) describes the workflow.
-
-## Versioning and license
-
-Releases use semantic version numbers such as `v0.1.0`, with pre-release tags such as `v0.1.0-alpha.2`. See the [GitHub Releases](https://github.com/KageRyo/netquota/releases) page for the current release; the badge at the top of this README is kept in sync automatically.
-
-NetQuota is released under the [MIT License](LICENSE).
-
-See the [Privacy Policy](PRIVACY.md) for information about local data storage and the background GitHub release check.
+NetQuota is open source under the [MIT License](LICENSE).
