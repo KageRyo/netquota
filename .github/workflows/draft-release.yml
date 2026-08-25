@@ -551,12 +551,12 @@ jobs:
           path: dist
 
       - name: Attest release packages
-        uses: actions/attest-build-provenance@v3
+        uses: actions/attest-build-provenance@v4
         with:
           subject-checksums: dist/SHA256SUMS
 
       - name: Attest release verification files
-        uses: actions/attest-build-provenance@v3
+        uses: actions/attest-build-provenance@v4
         with:
           subject-path: |
             dist/SHA256SUMS
