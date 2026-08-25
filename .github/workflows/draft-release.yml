@@ -217,14 +217,14 @@ jobs:
           Add-Content -LiteralPath $env:GITHUB_OUTPUT -Value "windows-signing-status=$signingStatus"
 
       - name: Upload workflow artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: netquota-windows-amd64
           path: netquota-windows-amd64.zip
           if-no-files-found: error
 
       - name: Upload installer artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: netquota-windows-amd64-installer
           path: release/netquota-windows-amd64-setup.exe
@@ -311,7 +311,7 @@ jobs:
           tar -C release -czf netquota-linux-amd64.tar.gz netquota-linux-amd64
 
       - name: Upload Linux package
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: netquota-linux-amd64
           path: netquota-linux-amd64.tar.gz
@@ -393,7 +393,7 @@ jobs:
             dist/RELEASE-METADATA.json
 
       - name: Upload prepared release assets
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: release-assets
           path: |
