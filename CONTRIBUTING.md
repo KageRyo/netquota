@@ -30,6 +30,10 @@ Every contribution—including code, tests, documentation, and CI changes—must
 
    `gofmt -l .` must produce no output. Do not include generated binaries, user data, or machine-specific settings in the change.
 
+   For tray/UI changes, also run `go test ./internal/tray -count=1` and review
+   [the accessibility checklist](docs/accessibility-checklist.md) for the
+   desktop-only checks.
+
 4. **Commit and push the branch.** Use [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/) and keep commits logically isolated:
 
    ```text
