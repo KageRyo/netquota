@@ -2,7 +2,9 @@ package tray
 
 import (
 	"image/color"
+	"strings"
 	"testing"
+	"time"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
@@ -13,6 +15,7 @@ import (
 
 	"github.com/KageRyo/netquota/internal/config"
 	"github.com/KageRyo/netquota/internal/i18n"
+	"github.com/KageRyo/netquota/internal/model"
 	"github.com/KageRyo/netquota/internal/network"
 )
 
@@ -58,7 +61,9 @@ func TestLocalizedDashboardAndSettingsRenderWithinProductionWidths(t *testing.T)
 			t.Fatalf("%s dashboard rendered no visible pixels", language)
 		}
 
-		view := newSettingsView(ui.translator, config.Default(), []network.Interface{
+		settingsConfig := config.Default()
+		settingsConfig.BillingCycle = model.BillingCycle{Kind: model.BillingCycleCustom, ResetDay: 31}
+		view := newSettingsView(ui.translator, settingsConfig, []network.Interface{
 			{Name: "Ethernet", IPv4: "192.0.2.10"},
 			{Name: "Wi-Fi", IPv6: "2001:db8::10"},
 		})
@@ -71,6 +76,18 @@ func TestLocalizedDashboardAndSettingsRenderWithinProductionWidths(t *testing.T)
 		settingsCanvas.SetContent(settings)
 		if !hasVisiblePixels(settingsCanvas.Capture()) {
 			t.Fatalf("%s settings rendered no visible pixels", language)
+		}
+	}
+}
+
+func TestLocalizedBillingCycleTextIsVisible(t *testing.T) {
+	t.Parallel()
+
+	nextReset := time.Date(2026, 9, 30, 0, 0, 0, 0, time.Local)
+	for _, language := range i18n.SupportedLanguages() {
+		text := billingCycleText(i18n.New(language), model.BillingCycle{Kind: model.BillingCycleCustom, ResetDay: 31}, nextReset)
+		if text == "" || strings.Contains(text, "dashboard.billing_cycle") || strings.Contains(text, "settings.cycle_custom") {
+			t.Fatalf("%s billing cycle text = %q, want rendered localized text", language, text)
 		}
 	}
 }

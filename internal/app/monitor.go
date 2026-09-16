@@ -176,6 +176,7 @@ func (m *Monitor) Sample(ctx context.Context, now time.Time) (Sample, error) {
 			"Percentage": alert.Percentage,
 			"Used":       format.Bytes(alert.UsedBytes),
 			"Limit":      format.Bytes(alert.LimitBytes),
+			"Cycle":      billingCycleName(translator, m.cfg.BillingCycle),
 		})
 		if err := m.notifier.Notify(translator.Text("notification.quota_warning"), message); err != nil {
 			m.logger.Warn("send quota notification", "error", err, "dimension", alert.Dimension, "percentage", alert.Percentage)
@@ -206,5 +207,17 @@ func dimensionName(translator i18n.Translator, dimension quota.Dimension) string
 		return translator.Text("notification.upload_usage")
 	default:
 		return string(dimension)
+	}
+}
+
+func billingCycleName(translator i18n.Translator, cycle model.BillingCycle) string {
+	cycle = cycle.Normalized()
+	switch cycle.Kind {
+	case model.BillingCycleMonthly:
+		return translator.Text("notification.cycle.monthly")
+	case model.BillingCycleCustom:
+		return translator.Text("notification.cycle.custom", map[string]any{"Day": cycle.ResetDay})
+	default:
+		return translator.Text("notification.cycle.daily")
 	}
 }

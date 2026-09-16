@@ -253,7 +253,7 @@ func TestMonitorLocalizesQuotaNotifications(t *testing.T) {
 		t.Fatalf("notifications = %d, want 1", len(notifier.notifications))
 	}
 	got := notifier.notifications[0]
-	if got.title != "NetQuota 流量上限警示" || got.message != "總流量已達 70%（70 B / 100 B）" {
+	if got.title != "NetQuota 流量上限警示" || got.message != "總流量已達 70%（70 B / 100 B）・每日" {
 		t.Fatalf("notification = (%q, %q)", got.title, got.message)
 	}
 }
