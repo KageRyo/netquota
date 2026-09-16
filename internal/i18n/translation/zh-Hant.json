@@ -53,6 +53,7 @@
   "settings.language": "語言",
   "settings.rebaseline.title": "要變更監測的網路介面嗎？",
   "settings.rebaseline.message": "無法復原先前介面的流量。要重設基準並監測 {{.Interface}} 嗎？",
+  "settings.keyboard_hint": "鍵盤操作：使用 Tab／Shift+Tab 移動，Enter／Space 執行，Escape 取消。",
   "update.check_failed": "無法檢查更新：{{.Error}}",
   "update.up_to_date.title": "NetQuota 已是最新版本",
   "update.up_to_date.message": "您正在使用 NetQuota v{{.Version}}。",

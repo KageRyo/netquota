@@ -53,6 +53,7 @@
   "settings.language": "Language",
   "settings.rebaseline.title": "Change monitored interface?",
   "settings.rebaseline.message": "Traffic from the previous interface cannot be recovered. Reset the baseline and monitor {{.Interface}}?",
+  "settings.keyboard_hint": "Keyboard: Tab/Shift+Tab to move, Enter/Space to activate, Escape to cancel.",
   "update.check_failed": "Could not check for updates: {{.Error}}",
   "update.up_to_date.title": "NetQuota is up to date",
   "update.up_to_date.message": "You are running NetQuota v{{.Version}}.",

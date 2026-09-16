@@ -9,6 +9,7 @@ import (
 
 	"fyne.io/fyne/v2"
 	canvaspkg "fyne.io/fyne/v2/canvas"
+	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/driver/software"
 	fyneTest "fyne.io/fyne/v2/test"
 	"fyne.io/fyne/v2/widget"
@@ -155,6 +156,118 @@ func TestReadSettingsKeepsInterfaceIdentity(t *testing.T) {
 	}
 	if updated.Language != i18n.Japanese {
 		t.Fatalf("language = %q, want %q", updated.Language, i18n.Japanese)
+	}
+}
+
+func TestSettingsViewHasDeterministicFocusableFormOrder(t *testing.T) {
+	app := fyneTest.NewApp()
+	defer app.Quit()
+
+	view := newSettingsView(i18n.New(i18n.English), config.Default(), []network.Interface{
+		{Name: "Ethernet", Index: 1, IPv4: "192.0.2.10"},
+		{Name: "Wi-Fi", Index: 2, IPv6: "2001:db8::10"},
+	})
+	got := make([]string, 0, len(view.form.Items))
+	for _, item := range view.form.Items {
+		got = append(got, item.Text)
+		if _, ok := item.Widget.(fyne.Focusable); !ok {
+			t.Fatalf("form item %q does not implement fyne.Focusable: %T", item.Text, item.Widget)
+		}
+	}
+	want := []string{
+		"Language",
+		"Network interface",
+		"Total quota (GiB)",
+		"Total alerts (%)",
+		"Download quota (GiB)",
+		"Download alerts (%)",
+		"Upload quota (GiB)",
+		"Upload alerts (%)",
+		"Notifications",
+		"Startup",
+	}
+	if len(got) != len(want) {
+		t.Fatalf("form item count = %d, want %d (%v)", len(got), len(want), got)
+	}
+	for index := range want {
+		if got[index] != want[index] {
+			t.Fatalf("form item %d = %q, want %q", index, got[index], want[index])
+		}
+	}
+	if view.form.OnSubmit == nil || view.form.OnCancel == nil {
+		t.Fatal("settings form must expose keyboard-action callbacks")
+	}
+	if view.keyboardHint.Text == "" {
+		t.Fatal("settings form must expose a keyboard hint")
+	}
+}
+
+func TestSettingsFocusTraversalVisitsEveryInput(t *testing.T) {
+	app := fyneTest.NewApp()
+	defer app.Quit()
+
+	view := newSettingsView(i18n.New(i18n.English), config.Default(), []network.Interface{{Name: "Ethernet"}})
+	window := app.NewWindow("Settings")
+	window.SetContent(container.NewVBox(view.keyboardHint, view.form))
+	window.Resize(fyne.NewSize(700, 700))
+
+	want := []fyne.Focusable{
+		view.language,
+		view.interfacePick,
+		view.totalQuota,
+		view.totalAlerts,
+		view.downloadQuota,
+		view.downloadAlerts,
+		view.uploadQuota,
+		view.uploadAlerts,
+		view.notifications,
+		view.startup,
+	}
+	for index, expected := range want {
+		window.Canvas().FocusNext()
+		if got := window.Canvas().Focused(); got != expected {
+			t.Fatalf("focus %d = %T, want %T", index, got, expected)
+		}
+	}
+}
+
+func TestSettingsKeyboardTogglesCheckboxes(t *testing.T) {
+	app := fyneTest.NewApp()
+	defer app.Quit()
+
+	view := newSettingsView(i18n.New(i18n.English), config.Default(), nil)
+	initialNotifications := view.notifications.Checked
+	initialStartup := view.startup.Checked
+	view.notifications.TypedRune(' ')
+	view.startup.TypedRune(' ')
+	if view.notifications.Checked == initialNotifications || view.startup.Checked == initialStartup {
+		t.Fatalf("Space did not toggle checkboxes: notifications=%v startup=%v", view.notifications.Checked, view.startup.Checked)
+	}
+}
+
+func TestSettingsEscapeUsesCancelHandlerAndRestoresPreviousHandler(t *testing.T) {
+	app := fyneTest.NewApp()
+	defer app.Quit()
+
+	window := app.NewWindow("Settings")
+	forwarded := false
+	previous := func(*fyne.KeyEvent) { forwarded = true }
+	window.Canvas().SetOnTypedKey(previous)
+	cancelled := false
+	restore := installSettingsKeyboard(window.Canvas(), func() { cancelled = true })
+	window.Canvas().OnTypedKey()(&fyne.KeyEvent{Name: fyne.KeyA})
+	if !forwarded {
+		t.Fatal("non-Escape key was not forwarded to the previous handler")
+	}
+	window.Canvas().OnTypedKey()(&fyne.KeyEvent{Name: fyne.KeyEscape})
+	if !cancelled {
+		t.Fatal("Escape did not invoke the cancel handler")
+	}
+	restore()
+	forwarded = false
+	window.Canvas().OnTypedKey()(&fyne.KeyEvent{Name: fyne.KeyA})
+	if !forwarded {
+		t.Fatal("restoring settings keyboard handler did not restore previous handler")
 	}
 }
 
