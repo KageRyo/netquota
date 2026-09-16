@@ -24,3 +24,6 @@ coverage.html
 # Local NetQuota data
 config.json
 state.json
+
+# Local isolated worktrees
+/.worktrees/
