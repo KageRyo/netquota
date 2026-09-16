@@ -141,15 +141,16 @@ func (m *trayMenu) setUpdating() {
 }
 
 type ui struct {
-	application fyne.App
-	window      fyne.Window
-	monitor     *monitorapp.Monitor
-	executable  string
-	translator  i18n.Translator
-	desktopApp  desktop.App
-	baseTheme   fyne.Theme
-	lastSample  *monitorapp.Sample
-	lastError   error
+	application        fyne.App
+	window             fyne.Window
+	monitor            *monitorapp.Monitor
+	executable         string
+	translator         i18n.Translator
+	desktopApp         desktop.App
+	baseTheme          fyne.Theme
+	lastSample         *monitorapp.Sample
+	lastError          error
+	settingsKeyRestore func()
 
 	interfaceLabel *widget.Label
 	statusLabel    *widget.Label
@@ -652,7 +653,7 @@ func (u *ui) showSettings() {
 	notifications := view.notifications
 	startOnLogin := view.startup
 	byName := view.byName
-	form.OnCancel = func() { u.window.SetContent(u.dashboard()) }
+	form.OnCancel = u.leaveSettings
 	saveSettings := func(updated model.Config) {
 		if err := u.monitor.SetConfig(updated); err != nil {
 			u.showError(i18n.WrapError("settings.save_failed", err, nil))
@@ -663,7 +664,7 @@ func (u *ui) showSettings() {
 			return
 		}
 		u.setLanguage(updated.Language)
-		u.window.SetContent(u.dashboard())
+		u.leaveSettings()
 	}
 	form.OnSubmit = func() {
 		updated, err := readSettings(cfg, languageSelect, interfaceSelect, byName, totalQuota, totalThresholds, downloadQuota, downloadThresholds, uploadQuota, uploadThresholds, notifications, startOnLogin)
@@ -685,9 +686,37 @@ func (u *ui) showSettings() {
 		}
 		saveSettings(updated)
 	}
-	back := widget.NewButtonWithIcon(u.translator.Text("app.back"), theme.NavigateBackIcon(), func() { u.window.SetContent(u.dashboard()) })
+	back := widget.NewButtonWithIcon(u.translator.Text("app.back"), theme.NavigateBackIcon(), u.leaveSettings)
+	if u.settingsKeyRestore != nil {
+		u.settingsKeyRestore()
+	}
+	u.settingsKeyRestore = installSettingsKeyboard(u.window.Canvas(), u.leaveSettings)
 	u.window.SetContent(container.NewBorder(back, nil, nil, nil, container.NewVScroll(container.NewVBox(view.keyboardHint, form))))
 	u.window.Show()
+}
+
+func (u *ui) leaveSettings() {
+	if u.settingsKeyRestore != nil {
+		u.settingsKeyRestore()
+		u.settingsKeyRestore = nil
+	}
+	u.window.SetContent(u.dashboard())
+}
+
+func installSettingsKeyboard(canvas fyne.Canvas, cancel func()) func() {
+	previous := canvas.OnTypedKey()
+	canvas.SetOnTypedKey(func(event *fyne.KeyEvent) {
+		if event != nil && event.Name == fyne.KeyEscape {
+			cancel()
+			return
+		}
+		if previous != nil {
+			previous(event)
+		}
+	})
+	return func() {
+		canvas.SetOnTypedKey(previous)
+	}
 }
 
 func interfaceSelectionChanged(current, updated model.InterfaceSelection) bool {

@@ -9,6 +9,7 @@ import (
 
 	"fyne.io/fyne/v2"
 	canvaspkg "fyne.io/fyne/v2/canvas"
+	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/driver/software"
 	fyneTest "fyne.io/fyne/v2/test"
 	"fyne.io/fyne/v2/widget"
@@ -198,6 +199,75 @@ func TestSettingsViewHasDeterministicFocusableFormOrder(t *testing.T) {
 	}
 	if view.keyboardHint.Text == "" {
 		t.Fatal("settings form must expose a keyboard hint")
+	}
+}
+
+func TestSettingsFocusTraversalVisitsEveryInput(t *testing.T) {
+	app := fyneTest.NewApp()
+	defer app.Quit()
+
+	view := newSettingsView(i18n.New(i18n.English), config.Default(), []network.Interface{{Name: "Ethernet"}})
+	window := app.NewWindow("Settings")
+	window.SetContent(container.NewVBox(view.keyboardHint, view.form))
+	window.Resize(fyne.NewSize(700, 700))
+
+	want := []fyne.Focusable{
+		view.language,
+		view.interfacePick,
+		view.totalQuota,
+		view.totalAlerts,
+		view.downloadQuota,
+		view.downloadAlerts,
+		view.uploadQuota,
+		view.uploadAlerts,
+		view.notifications,
+		view.startup,
+	}
+	for index, expected := range want {
+		window.Canvas().FocusNext()
+		if got := window.Canvas().Focused(); got != expected {
+			t.Fatalf("focus %d = %T, want %T", index, got, expected)
+		}
+	}
+}
+
+func TestSettingsKeyboardTogglesCheckboxes(t *testing.T) {
+	app := fyneTest.NewApp()
+	defer app.Quit()
+
+	view := newSettingsView(i18n.New(i18n.English), config.Default(), nil)
+	initialNotifications := view.notifications.Checked
+	initialStartup := view.startup.Checked
+	view.notifications.TypedKey(&fyne.KeyEvent{Name: fyne.KeySpace})
+	view.startup.TypedKey(&fyne.KeyEvent{Name: fyne.KeySpace})
+	if view.notifications.Checked == initialNotifications || view.startup.Checked == initialStartup {
+		t.Fatalf("Space did not toggle checkboxes: notifications=%v startup=%v", view.notifications.Checked, view.startup.Checked)
+	}
+}
+
+func TestSettingsEscapeUsesCancelHandlerAndRestoresPreviousHandler(t *testing.T) {
+	app := fyneTest.NewApp()
+	defer app.Quit()
+
+	window := app.NewWindow("Settings")
+	forwarded := false
+	previous := func(*fyne.KeyEvent) { forwarded = true }
+	window.Canvas().SetOnTypedKey(previous)
+	cancelled := false
+	restore := installSettingsKeyboard(window.Canvas(), func() { cancelled = true })
+	window.Canvas().OnTypedKey()(&fyne.KeyEvent{Name: fyne.KeyA})
+	if !forwarded {
+		t.Fatal("non-Escape key was not forwarded to the previous handler")
+	}
+	window.Canvas().OnTypedKey()(&fyne.KeyEvent{Name: fyne.KeyEscape})
+	if !cancelled {
+		t.Fatal("Escape did not invoke the cancel handler")
+	}
+	restore()
+	forwarded = false
+	window.Canvas().OnTypedKey()(&fyne.KeyEvent{Name: fyne.KeyA})
+	if !forwarded {
+		t.Fatal("restoring settings keyboard handler did not restore previous handler")
 	}
 }
 
