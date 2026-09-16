@@ -92,6 +92,9 @@ func (GopsutilProvider) Counters(ctx context.Context, name string) (Counters, er
 // then deterministic non-loopback candidates.
 func Select(selection model.InterfaceSelection, interfaces []Interface) (Interface, error) {
 	if len(interfaces) == 0 {
+		if selectionConfigured(selection) {
+			return Interface{}, fmt.Errorf("%w: %s", ErrSelectedInterfaceUnavailable, selectionDisplayName(selection))
+		}
 		return Interface{}, fmt.Errorf("no network interfaces found")
 	}
 	if selectionConfigured(selection) {

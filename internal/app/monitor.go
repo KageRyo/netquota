@@ -123,11 +123,15 @@ func (m *Monitor) Sample(ctx context.Context, now time.Time) (Sample, error) {
 	if err != nil {
 		return Sample{}, err
 	}
-	selected, err := network.Select(m.cfg.Interface, interfaces)
+	selection := m.cfg.Interface
+	if selection == (model.InterfaceSelection{}) && m.selected.Name != "" {
+		selection = network.SelectionForInterface(m.selected)
+	}
+	selected, err := network.Select(selection, interfaces)
 	if err != nil {
 		return Sample{}, err
 	}
-	if m.selected.Name != "" && (m.selected.Name != selected.Name || m.selected.HardwareAddress != selected.HardwareAddress) {
+	if m.selected.Name != "" && !network.SameIdentity(m.selected, selected) {
 		m.tracker.ResetForInterface()
 	}
 	m.selected = selected
