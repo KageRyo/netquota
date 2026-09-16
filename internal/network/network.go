@@ -2,6 +2,7 @@ package network
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"sort"
@@ -13,8 +14,11 @@ import (
 
 type Interface struct {
 	Name            string
+	Index           int
 	HardwareAddress string
 	IPv4            string
+	IPv6            string
+	DefaultRoute    bool
 	Flags           []string
 }
 
@@ -28,6 +32,8 @@ type Provider interface {
 	Counters(context.Context, string) (Counters, error)
 }
 
+var ErrSelectedInterfaceUnavailable = errors.New("selected network interface is unavailable")
+
 type GopsutilProvider struct{}
 
 func (GopsutilProvider) Interfaces(ctx context.Context) ([]Interface, error) {
@@ -35,13 +41,29 @@ func (GopsutilProvider) Interfaces(ctx context.Context) ([]Interface, error) {
 	if err != nil {
 		return nil, fmt.Errorf("list network interfaces: %w", err)
 	}
+	standardInterfaces, err := net.Interfaces()
+	if err != nil {
+		return nil, fmt.Errorf("list standard network interfaces: %w", err)
+	}
+	standardByName := make(map[string]net.Interface, len(standardInterfaces))
+	for _, iface := range standardInterfaces {
+		standardByName[iface.Name] = iface
+	}
+	routeIndexes, routeErr := defaultRouteInterfaceIndexes(ctx)
+	if routeErr != nil && ctx.Err() != nil {
+		return nil, routeErr
+	}
 
 	result := make([]Interface, 0, len(stats))
 	for _, stat := range stats {
+		standard := standardByName[stat.Name]
 		result = append(result, Interface{
 			Name:            stat.Name,
+			Index:           standard.Index,
 			HardwareAddress: stat.HardwareAddr,
 			IPv4:            firstIPv4(stat.Addrs),
+			IPv6:            firstIPv6(stat.Addrs),
+			DefaultRoute:    hasIndex(routeIndexes, standard.Index),
 			Flags:           append([]string(nil), stat.Flags...),
 		})
 	}
@@ -65,35 +87,28 @@ func (GopsutilProvider) Counters(ctx context.Context, name string) (Counters, er
 	return Counters{}, fmt.Errorf("network interface %q is not available", name)
 }
 
-// Select resolves a saved interface and falls back to the first non-loopback
-// interface when no preference was configured.
+// Select resolves a saved interface without falling back to an unrelated
+// interface. With no saved preference it prefers an active default route and
+// then deterministic non-loopback candidates.
 func Select(selection model.InterfaceSelection, interfaces []Interface) (Interface, error) {
 	if len(interfaces) == 0 {
 		return Interface{}, fmt.Errorf("no network interfaces found")
 	}
-	if selection.Name != "" {
+	if selectionConfigured(selection) {
 		for _, iface := range interfaces {
-			if iface.Name == selection.Name && (selection.HardwareAddress == "" || strings.EqualFold(iface.HardwareAddress, selection.HardwareAddress)) {
+			if matchesSelection(selection, iface) {
 				return iface, nil
 			}
 		}
-		// A changed hardware address should not make a user lose a deliberately
-		// selected interface name.
-		for _, iface := range interfaces {
-			if iface.Name == selection.Name {
-				return iface, nil
-			}
-		}
+		return Interface{}, fmt.Errorf("%w: %s", ErrSelectedInterfaceUnavailable, selectionDisplayName(selection))
 	}
-	if selection.HardwareAddress != "" {
-		for _, iface := range interfaces {
-			if strings.EqualFold(iface.HardwareAddress, selection.HardwareAddress) {
-				return iface, nil
-			}
+	for _, iface := range interfaces {
+		if !isLoopback(iface) && iface.DefaultRoute {
+			return iface, nil
 		}
 	}
 	for _, iface := range interfaces {
-		if !isLoopback(iface) && iface.IPv4 != "" {
+		if !isLoopback(iface) && hasAddress(iface) {
 			return iface, nil
 		}
 	}
@@ -103,6 +118,68 @@ func Select(selection model.InterfaceSelection, interfaces []Interface) (Interfa
 		}
 	}
 	return interfaces[0], nil
+}
+
+func SelectionForInterface(iface Interface) model.InterfaceSelection {
+	return model.InterfaceSelection{
+		Name:            iface.Name,
+		Index:           iface.Index,
+		HardwareAddress: iface.HardwareAddress,
+		IPv4:            iface.IPv4,
+		IPv6:            iface.IPv6,
+	}
+}
+
+func SameIdentity(left, right Interface) bool {
+	if left.Index != 0 && right.Index != 0 {
+		return left.Index == right.Index
+	}
+	if left.HardwareAddress != "" && right.HardwareAddress != "" {
+		return strings.EqualFold(left.HardwareAddress, right.HardwareAddress)
+	}
+	return left.Name != "" && left.Name == right.Name
+}
+
+func selectionConfigured(selection model.InterfaceSelection) bool {
+	return selection.Name != "" || selection.Index != 0 || selection.HardwareAddress != "" || selection.IPv4 != "" || selection.IPv6 != ""
+}
+
+func matchesSelection(selection model.InterfaceSelection, iface Interface) bool {
+	if selection.Index != 0 && iface.Index != 0 && selection.Index == iface.Index {
+		return true
+	}
+	if selection.HardwareAddress != "" && iface.HardwareAddress != "" && strings.EqualFold(iface.HardwareAddress, selection.HardwareAddress) {
+		return true
+	}
+	if selection.Index == 0 && selection.HardwareAddress == "" {
+		if selection.Name != "" && selection.Name == iface.Name {
+			return true
+		}
+		if selection.IPv4 != "" && selection.IPv4 == iface.IPv4 {
+			return true
+		}
+		if selection.IPv6 != "" && selection.IPv6 == iface.IPv6 {
+			return true
+		}
+	}
+	return false
+}
+
+func selectionDisplayName(selection model.InterfaceSelection) string {
+	if selection.Name != "" {
+		return fmt.Sprintf("%q", selection.Name)
+	}
+	if selection.HardwareAddress != "" {
+		return fmt.Sprintf("%q", selection.HardwareAddress)
+	}
+	if selection.IPv4 != "" {
+		return fmt.Sprintf("%q", selection.IPv4)
+	}
+	return fmt.Sprintf("interface index %d", selection.Index)
+}
+
+func hasAddress(iface Interface) bool {
+	return iface.IPv4 != "" || iface.IPv6 != ""
 }
 
 func firstIPv4(addresses []psnet.InterfaceAddr) string {
@@ -119,6 +196,27 @@ func firstIPv4(addresses []psnet.InterfaceAddr) string {
 		}
 	}
 	return ""
+}
+
+func firstIPv6(addresses []psnet.InterfaceAddr) string {
+	for _, address := range addresses {
+		value := strings.TrimSpace(address.Addr)
+		if host, _, err := net.ParseCIDR(value); err == nil {
+			if host.To4() == nil && host.IsGlobalUnicast() {
+				return host.String()
+			}
+			continue
+		}
+		if ip := net.ParseIP(value); ip != nil && ip.To4() == nil && ip.IsGlobalUnicast() {
+			return ip.String()
+		}
+	}
+	return ""
+}
+
+func hasIndex(indexes map[int]struct{}, index int) bool {
+	_, ok := indexes[index]
+	return index != 0 && ok
 }
 
 func isLoopback(iface Interface) bool {
