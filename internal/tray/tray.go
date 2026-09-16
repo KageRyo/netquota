@@ -539,15 +539,25 @@ func releasePageURL(release updateapp.Release) (*url.URL, error) {
 	return parsed, nil
 }
 
-func (u *ui) showSettings() {
-	cfg := u.monitor.Config()
-	interfaces, err := u.monitor.Interfaces(context.Background())
-	if err != nil {
-		u.showError(i18n.WrapError("settings.load_interfaces_failed", err, nil))
-		return
-	}
-	options := make([]string, 0, len(interfaces))
-	byName := make(map[string]network.Interface, len(interfaces))
+type settingsView struct {
+	form           *widget.Form
+	keyboardHint   *widget.Label
+	language       *widget.Select
+	interfacePick  *widget.Select
+	totalQuota     *widget.Entry
+	totalAlerts    *widget.Entry
+	downloadQuota  *widget.Entry
+	downloadAlerts *widget.Entry
+	uploadQuota    *widget.Entry
+	uploadAlerts   *widget.Entry
+	notifications  *widget.Check
+	startup        *widget.Check
+	byName         map[string]network.Interface
+}
+
+func newSettingsView(translator i18n.Translator, cfg model.Config, interfaces []network.Interface) *settingsView {
+	options := make([]string, 0, len(interfaces)+1)
+	byName := make(map[string]network.Interface, len(interfaces)+1)
 	for _, iface := range interfaces {
 		options = append(options, iface.Name)
 		byName[iface.Name] = iface
@@ -564,44 +574,84 @@ func (u *ui) showSettings() {
 			}
 		}
 	}
-	interfaceSelect := widget.NewSelect(options, nil)
-	interfaceSelect.PlaceHolder = u.translator.Text("settings.choose_interface")
-	if cfg.Interface.Name != "" {
-		interfaceSelect.SetSelected(cfg.Interface.Name)
-	}
-	languageSelect := widget.NewSelect(i18n.DisplayNames(), nil)
-	languageSelect.SetSelected(i18n.DisplayName(cfg.Language))
 
+	interfacePick := widget.NewSelect(options, nil)
+	interfacePick.PlaceHolder = translator.Text("settings.choose_interface")
+	if cfg.Interface.Name != "" {
+		interfacePick.SetSelected(cfg.Interface.Name)
+	}
+	language := widget.NewSelect(i18n.DisplayNames(), nil)
+	language.SetSelected(i18n.DisplayName(cfg.Language))
 	totalQuota := widget.NewEntry()
 	downloadQuota := widget.NewEntry()
 	uploadQuota := widget.NewEntry()
-	totalThresholds := widget.NewEntry()
-	downloadThresholds := widget.NewEntry()
-	uploadThresholds := widget.NewEntry()
+	totalAlerts := widget.NewEntry()
+	downloadAlerts := widget.NewEntry()
+	uploadAlerts := widget.NewEntry()
 	totalQuota.SetText(gibString(cfg.Quotas.Total.Bytes))
 	downloadQuota.SetText(gibString(cfg.Quotas.Download.Bytes))
 	uploadQuota.SetText(gibString(cfg.Quotas.Upload.Bytes))
-	totalThresholds.SetText(thresholdString(cfg.Quotas.Total.AlertPercentages))
-	downloadThresholds.SetText(thresholdString(cfg.Quotas.Download.AlertPercentages))
-	uploadThresholds.SetText(thresholdString(cfg.Quotas.Upload.AlertPercentages))
-	notifications := widget.NewCheck(u.translator.Text("settings.desktop_notifications"), nil)
+	totalAlerts.SetText(thresholdString(cfg.Quotas.Total.AlertPercentages))
+	downloadAlerts.SetText(thresholdString(cfg.Quotas.Download.AlertPercentages))
+	uploadAlerts.SetText(thresholdString(cfg.Quotas.Upload.AlertPercentages))
+	notifications := widget.NewCheck(translator.Text("settings.desktop_notifications"), nil)
 	notifications.SetChecked(cfg.Notifications.Enabled)
-	startOnLogin := widget.NewCheck(u.translator.Text("settings.start_on_login"), nil)
-	startOnLogin.SetChecked(cfg.StartOnLogin)
+	startup := widget.NewCheck(translator.Text("settings.start_on_login"), nil)
+	startup.SetChecked(cfg.StartOnLogin)
 
 	form := widget.NewForm()
-	form.SubmitText = u.translator.Text("settings.save")
-	form.CancelText = u.translator.Text("app.cancel")
-	form.Append(u.translator.Text("settings.language"), languageSelect)
-	form.Append(u.translator.Text("settings.network_interface"), interfaceSelect)
-	form.Append(u.translator.Text("settings.total_quota"), totalQuota)
-	form.Append(u.translator.Text("settings.total_alerts"), totalThresholds)
-	form.Append(u.translator.Text("settings.download_quota"), downloadQuota)
-	form.Append(u.translator.Text("settings.download_alerts"), downloadThresholds)
-	form.Append(u.translator.Text("settings.upload_quota"), uploadQuota)
-	form.Append(u.translator.Text("settings.upload_alerts"), uploadThresholds)
-	form.Append(u.translator.Text("settings.notifications"), notifications)
-	form.Append(u.translator.Text("settings.startup"), startOnLogin)
+	form.SubmitText = translator.Text("settings.save")
+	form.CancelText = translator.Text("app.cancel")
+	form.Append(translator.Text("settings.language"), language)
+	form.Append(translator.Text("settings.network_interface"), interfacePick)
+	form.Append(translator.Text("settings.total_quota"), totalQuota)
+	form.Append(translator.Text("settings.total_alerts"), totalAlerts)
+	form.Append(translator.Text("settings.download_quota"), downloadQuota)
+	form.Append(translator.Text("settings.download_alerts"), downloadAlerts)
+	form.Append(translator.Text("settings.upload_quota"), uploadQuota)
+	form.Append(translator.Text("settings.upload_alerts"), uploadAlerts)
+	form.Append(translator.Text("settings.notifications"), notifications)
+	form.Append(translator.Text("settings.startup"), startup)
+	form.OnSubmit = func() {}
+	form.OnCancel = func() {}
+
+	return &settingsView{
+		form:           form,
+		keyboardHint:   widget.NewLabel(translator.Text("settings.keyboard_hint")),
+		language:       language,
+		interfacePick:  interfacePick,
+		totalQuota:     totalQuota,
+		totalAlerts:    totalAlerts,
+		downloadQuota:  downloadQuota,
+		downloadAlerts: downloadAlerts,
+		uploadQuota:    uploadQuota,
+		uploadAlerts:   uploadAlerts,
+		notifications:  notifications,
+		startup:        startup,
+		byName:         byName,
+	}
+}
+
+func (u *ui) showSettings() {
+	cfg := u.monitor.Config()
+	interfaces, err := u.monitor.Interfaces(context.Background())
+	if err != nil {
+		u.showError(i18n.WrapError("settings.load_interfaces_failed", err, nil))
+		return
+	}
+	view := newSettingsView(u.translator, cfg, interfaces)
+	form := view.form
+	languageSelect := view.language
+	interfaceSelect := view.interfacePick
+	totalQuota := view.totalQuota
+	totalThresholds := view.totalAlerts
+	downloadQuota := view.downloadQuota
+	downloadThresholds := view.downloadAlerts
+	uploadQuota := view.uploadQuota
+	uploadThresholds := view.uploadAlerts
+	notifications := view.notifications
+	startOnLogin := view.startup
+	byName := view.byName
 	form.OnCancel = func() { u.window.SetContent(u.dashboard()) }
 	saveSettings := func(updated model.Config) {
 		if err := u.monitor.SetConfig(updated); err != nil {
@@ -636,7 +686,7 @@ func (u *ui) showSettings() {
 		saveSettings(updated)
 	}
 	back := widget.NewButtonWithIcon(u.translator.Text("app.back"), theme.NavigateBackIcon(), func() { u.window.SetContent(u.dashboard()) })
-	u.window.SetContent(container.NewBorder(back, nil, nil, nil, container.NewVScroll(form)))
+	u.window.SetContent(container.NewBorder(back, nil, nil, nil, container.NewVScroll(container.NewVBox(view.keyboardHint, form))))
 	u.window.Show()
 }
 

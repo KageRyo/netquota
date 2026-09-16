@@ -53,6 +53,7 @@
   "settings.language": "言語",
   "settings.rebaseline.title": "監視するインターフェースを変更しますか？",
   "settings.rebaseline.message": "以前のインターフェースの通信量は復元できません。基準値をリセットして {{.Interface}} を監視しますか？",
+  "settings.keyboard_hint": "キーボード：Tab／Shift+Tabで移動、Enter／Spaceで実行、Escapeでキャンセル。",
   "update.check_failed": "更新を確認できませんでした：{{.Error}}",
   "update.up_to_date.title": "NetQuota は最新です",
   "update.up_to_date.message": "NetQuota v{{.Version}} を実行しています。",
