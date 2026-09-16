@@ -6,6 +6,7 @@ import (
 	"image"
 	"image/color"
 	"testing"
+	"time"
 
 	"fyne.io/fyne/v2"
 	canvaspkg "fyne.io/fyne/v2/canvas"
@@ -130,6 +131,16 @@ func TestInterfaceSelectionChangeRequiresRebaselineConfirmation(t *testing.T) {
 	}
 }
 
+func TestBillingCycleTextIncludesLocalizedCycleAndNextReset(t *testing.T) {
+	t.Parallel()
+
+	nextReset := time.Date(2026, 9, 30, 0, 0, 0, 0, time.Local)
+	got := billingCycleText(i18n.New(i18n.English), model.BillingCycle{Kind: model.BillingCycleCustom, ResetDay: 31}, nextReset)
+	if want := "Custom monthly (day 31) · reset 2026-09-30 00:00"; got != want {
+		t.Fatalf("billing cycle text = %q, want %q", got, want)
+	}
+}
+
 func TestReadSettingsKeepsInterfaceIdentity(t *testing.T) {
 	t.Parallel()
 
@@ -159,6 +170,52 @@ func TestReadSettingsKeepsInterfaceIdentity(t *testing.T) {
 	}
 }
 
+func TestReadSettingsParsesCustomBillingCycle(t *testing.T) {
+	app := fyneTest.NewApp()
+	defer app.Quit()
+	view := newSettingsView(i18n.New(i18n.English), config.Default(), nil)
+	view.billingCycle.SetSelected("Custom monthly (day 1)")
+	view.customResetDay.SetText("31")
+	updated, err := readSettingsWithCycle(
+		config.Default(),
+		view.language,
+		view.interfacePick,
+		view.byName,
+		view.totalQuota, view.totalAlerts,
+		view.downloadQuota, view.downloadAlerts,
+		view.uploadQuota, view.uploadAlerts,
+		view.notifications, view.startup,
+		view.billingCycle, view.customResetDay,
+	)
+	if err != nil {
+		t.Fatalf("readSettingsWithCycle: %v", err)
+	}
+	if updated.BillingCycle != (model.BillingCycle{Kind: model.BillingCycleCustom, ResetDay: 31}) {
+		t.Fatalf("billing cycle = %+v, want custom day 31", updated.BillingCycle)
+	}
+}
+
+func TestReadSettingsRejectsInvalidCustomBillingCycleDay(t *testing.T) {
+	app := fyneTest.NewApp()
+	defer app.Quit()
+	view := newSettingsView(i18n.New(i18n.English), config.Default(), nil)
+	view.billingCycle.SetSelected("Custom monthly (day 1)")
+	view.customResetDay.SetText("32")
+	if _, err := readSettingsWithCycle(
+		config.Default(),
+		view.language,
+		view.interfacePick,
+		view.byName,
+		view.totalQuota, view.totalAlerts,
+		view.downloadQuota, view.downloadAlerts,
+		view.uploadQuota, view.uploadAlerts,
+		view.notifications, view.startup,
+		view.billingCycle, view.customResetDay,
+	); err == nil {
+		t.Fatal("readSettingsWithCycle accepted custom reset day 32")
+	}
+}
+
 func TestSettingsViewHasDeterministicFocusableFormOrder(t *testing.T) {
 	app := fyneTest.NewApp()
 	defer app.Quit()
@@ -177,6 +234,8 @@ func TestSettingsViewHasDeterministicFocusableFormOrder(t *testing.T) {
 	want := []string{
 		"Language",
 		"Network interface",
+		"Billing cycle",
+		"Custom reset day (1-31)",
 		"Total quota (GiB)",
 		"Total alerts (%)",
 		"Download quota (GiB)",
@@ -214,6 +273,7 @@ func TestSettingsFocusTraversalVisitsEveryInput(t *testing.T) {
 	want := []fyne.Focusable{
 		view.language,
 		view.interfacePick,
+		view.billingCycle,
 		view.totalQuota,
 		view.totalAlerts,
 		view.downloadQuota,

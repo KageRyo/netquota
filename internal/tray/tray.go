@@ -29,6 +29,7 @@ import (
 	"github.com/KageRyo/netquota/internal/quota"
 	"github.com/KageRyo/netquota/internal/startup"
 	updateapp "github.com/KageRyo/netquota/internal/update"
+	"github.com/KageRyo/netquota/internal/usage"
 	"github.com/KageRyo/netquota/internal/version"
 )
 
@@ -153,6 +154,7 @@ type ui struct {
 	settingsKeyRestore func()
 
 	interfaceLabel *widget.Label
+	cycleLabel     *widget.Label
 	statusLabel    *widget.Label
 	updatedLabel   *widget.Label
 	downloadLabel  *widget.Label
@@ -173,6 +175,7 @@ func newUI(application fyne.App, window fyne.Window, monitor *monitorapp.Monitor
 		translator:     i18n.New(monitor.Config().Language),
 		baseTheme:      application.Settings().Theme(),
 		interfaceLabel: widget.NewLabel(""),
+		cycleLabel:     widget.NewLabel(""),
 		statusLabel:    widget.NewLabel(""),
 		updatedLabel:   widget.NewLabel(""),
 		downloadLabel:  widget.NewLabel(""),
@@ -216,11 +219,16 @@ func (u *ui) dashboard() fyne.CanvasObject {
 	reselectButton := widget.NewButtonWithIcon(u.translator.Text("dashboard.choose_interface"), theme.SettingsIcon(), u.showSettings)
 	reselectButton.Hide()
 	u.reselectButton = reselectButton
+	cycleLabel := u.cycleLabel
+	if cycleLabel == nil {
+		cycleLabel = widget.NewLabel("")
+	}
 	buttons := container.NewGridWithColumns(2, settingsButton, quitButton)
 	content := container.NewVBox(
 		widget.NewLabelWithStyle("NetQuota v"+version.Value, fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
 		widget.NewSeparator(),
 		u.interfaceLabel,
+		cycleLabel,
 		u.statusLabel,
 		u.updatedLabel,
 		widget.NewSeparator(),
@@ -274,6 +282,11 @@ func (u *ui) sample(ctx context.Context) {
 }
 
 func (u *ui) refreshDashboardLabels() {
+	if u.cycleLabel != nil && u.monitor != nil {
+		cfg := u.monitor.Config()
+		period := usage.CurrentPeriod(time.Now(), cfg.BillingCycle, time.Local)
+		u.cycleLabel.SetText(billingCycleText(u.translator, cfg.BillingCycle, period.NextReset))
+	}
 	if u.lastError != nil {
 		if u.reselectButton != nil {
 			if errors.Is(u.lastError, network.ErrSelectedInterfaceUnavailable) {
@@ -545,6 +558,8 @@ type settingsView struct {
 	keyboardHint   *widget.Label
 	language       *widget.Select
 	interfacePick  *widget.Select
+	billingCycle   *widget.Select
+	customResetDay *widget.Entry
 	totalQuota     *widget.Entry
 	totalAlerts    *widget.Entry
 	downloadQuota  *widget.Entry
@@ -557,6 +572,7 @@ type settingsView struct {
 }
 
 func newSettingsView(translator i18n.Translator, cfg model.Config, interfaces []network.Interface) *settingsView {
+	cfg.BillingCycle = cfg.BillingCycle.Normalized()
 	options := make([]string, 0, len(interfaces)+1)
 	byName := make(map[string]network.Interface, len(interfaces)+1)
 	for _, iface := range interfaces {
@@ -583,6 +599,27 @@ func newSettingsView(translator i18n.Translator, cfg model.Config, interfaces []
 	}
 	language := widget.NewSelect(i18n.DisplayNames(), nil)
 	language.SetSelected(i18n.DisplayName(cfg.Language))
+	billingCycle := widget.NewSelect(billingCycleOptions(translator), nil)
+	customResetDay := widget.NewEntry()
+	resetDay := cfg.BillingCycle.ResetDay
+	if resetDay == 0 {
+		resetDay = 1
+	}
+	customResetDay.SetText(strconv.Itoa(int(resetDay)))
+	customCycleOption := translator.Text("settings.cycle_custom", map[string]any{"Day": 1})
+	billingCycle.OnChanged = func(selected string) {
+		if selected == customCycleOption {
+			customResetDay.Enable()
+			return
+		}
+		customResetDay.Disable()
+	}
+	billingCycle.SetSelected(billingCycleOption(translator, cfg.BillingCycle))
+	if cfg.BillingCycle.Kind == model.BillingCycleCustom {
+		customResetDay.Enable()
+	} else {
+		customResetDay.Disable()
+	}
 	totalQuota := widget.NewEntry()
 	downloadQuota := widget.NewEntry()
 	uploadQuota := widget.NewEntry()
@@ -605,6 +642,8 @@ func newSettingsView(translator i18n.Translator, cfg model.Config, interfaces []
 	form.CancelText = translator.Text("app.cancel")
 	form.Append(translator.Text("settings.language"), language)
 	form.Append(translator.Text("settings.network_interface"), interfacePick)
+	form.Append(translator.Text("settings.billing_cycle"), billingCycle)
+	form.Append(translator.Text("settings.custom_reset_day"), customResetDay)
 	form.Append(translator.Text("settings.total_quota"), totalQuota)
 	form.Append(translator.Text("settings.total_alerts"), totalAlerts)
 	form.Append(translator.Text("settings.download_quota"), downloadQuota)
@@ -621,6 +660,8 @@ func newSettingsView(translator i18n.Translator, cfg model.Config, interfaces []
 		keyboardHint:   widget.NewLabel(translator.Text("settings.keyboard_hint")),
 		language:       language,
 		interfacePick:  interfacePick,
+		billingCycle:   billingCycle,
+		customResetDay: customResetDay,
 		totalQuota:     totalQuota,
 		totalAlerts:    totalAlerts,
 		downloadQuota:  downloadQuota,
@@ -630,6 +671,25 @@ func newSettingsView(translator i18n.Translator, cfg model.Config, interfaces []
 		notifications:  notifications,
 		startup:        startup,
 		byName:         byName,
+	}
+}
+
+func billingCycleOptions(translator i18n.Translator) []string {
+	return []string{
+		translator.Text("settings.cycle_daily"),
+		translator.Text("settings.cycle_monthly"),
+		translator.Text("settings.cycle_custom", map[string]any{"Day": 1}),
+	}
+}
+
+func billingCycleOption(translator i18n.Translator, cycle model.BillingCycle) string {
+	switch cycle.Normalized().Kind {
+	case model.BillingCycleMonthly:
+		return translator.Text("settings.cycle_monthly")
+	case model.BillingCycleCustom:
+		return translator.Text("settings.cycle_custom", map[string]any{"Day": 1})
+	default:
+		return translator.Text("settings.cycle_daily")
 	}
 }
 
@@ -652,6 +712,8 @@ func (u *ui) showSettings() {
 	uploadThresholds := view.uploadAlerts
 	notifications := view.notifications
 	startOnLogin := view.startup
+	billingCycle := view.billingCycle
+	customResetDay := view.customResetDay
 	byName := view.byName
 	form.OnCancel = u.leaveSettings
 	saveSettings := func(updated model.Config) {
@@ -667,15 +729,26 @@ func (u *ui) showSettings() {
 		u.leaveSettings()
 	}
 	form.OnSubmit = func() {
-		updated, err := readSettings(cfg, languageSelect, interfaceSelect, byName, totalQuota, totalThresholds, downloadQuota, downloadThresholds, uploadQuota, uploadThresholds, notifications, startOnLogin)
+		updated, err := readSettingsWithCycle(cfg, languageSelect, interfaceSelect, byName, totalQuota, totalThresholds, downloadQuota, downloadThresholds, uploadQuota, uploadThresholds, notifications, startOnLogin, billingCycle, customResetDay)
 		if err != nil {
 			u.showError(err)
 			return
 		}
-		if interfaceSelectionChanged(cfg.Interface, updated.Interface) {
+		interfaceChanged := interfaceSelectionChanged(cfg.Interface, updated.Interface)
+		cycleChanged := !cfg.BillingCycle.Equal(updated.BillingCycle)
+		if interfaceChanged || cycleChanged {
+			data := map[string]any{"Cycle": billingCycleName(u.translator, updated.BillingCycle), "Interface": updated.Interface.Name}
+			titleKey := "settings.rebaseline.title"
+			messageKey := "settings.rebaseline.message"
+			if cycleChanged && !interfaceChanged {
+				titleKey = "settings.cycle_change.title"
+				messageKey = "settings.cycle_change.message"
+			} else if cycleChanged {
+				messageKey = "settings.rebaseline.combined"
+			}
 			u.showConfirm(
-				u.translator.Text("settings.rebaseline.title"),
-				u.translator.Text("settings.rebaseline.message", map[string]any{"Interface": updated.Interface.Name}),
+				u.translator.Text(titleKey),
+				u.translator.Text(messageKey, data),
 				func(confirmed bool) {
 					if confirmed {
 						saveSettings(updated)
@@ -733,12 +806,34 @@ func readSettings(
 	uploadQuota, uploadThresholds *widget.Entry,
 	notifications, startOnLogin *widget.Check,
 ) (model.Config, error) {
+	return readSettingsWithCycle(cfg, languageSelect, interfaceSelect, byName, totalQuota, totalThresholds, downloadQuota, downloadThresholds, uploadQuota, uploadThresholds, notifications, startOnLogin, nil, nil)
+}
+
+func readSettingsWithCycle(
+	cfg model.Config,
+	languageSelect,
+	interfaceSelect *widget.Select,
+	byName map[string]network.Interface,
+	totalQuota, totalThresholds,
+	downloadQuota, downloadThresholds,
+	uploadQuota, uploadThresholds *widget.Entry,
+	notifications, startOnLogin *widget.Check,
+	billingCycle *widget.Select,
+	customResetDay *widget.Entry,
+) (model.Config, error) {
 	var err error
+	cycleTranslator := i18n.New(cfg.Language)
 	language, ok := i18n.ParseDisplayName(languageSelect.Selected)
 	if !ok {
 		return model.Config{}, i18n.NewError("error.language_invalid", nil)
 	}
 	cfg.Language = language
+	if billingCycle != nil {
+		cfg.BillingCycle, err = parseBillingCycle(cycleTranslator, billingCycle.Selected, customResetDay)
+		if err != nil {
+			return model.Config{}, err
+		}
+	}
 	if cfg.Quotas.Total, err = parseLimit(totalQuota.Text, totalThresholds.Text); err != nil {
 		return model.Config{}, i18n.WrapError("error.settings.total_quota", err, nil)
 	}
@@ -762,6 +857,26 @@ func readSettings(
 	return cfg, nil
 }
 
+func parseBillingCycle(translator i18n.Translator, selected string, customResetDay *widget.Entry) (model.BillingCycle, error) {
+	switch selected {
+	case translator.Text("settings.cycle_daily"):
+		return model.BillingCycle{Kind: model.BillingCycleDaily}, nil
+	case translator.Text("settings.cycle_monthly"):
+		return model.BillingCycle{Kind: model.BillingCycleMonthly}, nil
+	case translator.Text("settings.cycle_custom", map[string]any{"Day": 1}):
+		if customResetDay == nil {
+			return model.BillingCycle{}, i18n.NewError("error.billing_cycle_day", nil)
+		}
+		day, parseErr := strconv.Atoi(strings.TrimSpace(customResetDay.Text))
+		if parseErr != nil || day < 1 || day > 31 {
+			return model.BillingCycle{}, i18n.NewError("error.billing_cycle_day", nil)
+		}
+		return model.BillingCycle{Kind: model.BillingCycleCustom, ResetDay: uint8(day)}, nil
+	default:
+		return model.BillingCycle{}, i18n.NewError("error.billing_cycle_invalid", nil)
+	}
+}
+
 func parseLimit(quotaInput, thresholdInput string) (model.Limit, error) {
 	bytes, err := format.ParseGiB(quotaInput)
 	if err != nil {
@@ -782,6 +897,24 @@ func interfaceText(translator i18n.Translator, iface network.Interface) string {
 		return translator.Text("metric.interface_ipv6", map[string]any{"Name": iface.Name, "IPv6": iface.IPv6})
 	}
 	return translator.Text("metric.interface", map[string]any{"Name": iface.Name})
+}
+
+func billingCycleText(translator i18n.Translator, cycle model.BillingCycle, nextReset time.Time) string {
+	return translator.Text("dashboard.billing_cycle", map[string]any{
+		"Cycle":     billingCycleName(translator, cycle),
+		"NextReset": nextReset.In(time.Local).Format("2006-01-02 15:04"),
+	})
+}
+
+func billingCycleName(translator i18n.Translator, cycle model.BillingCycle) string {
+	switch cycle.Normalized().Kind {
+	case model.BillingCycleMonthly:
+		return translator.Text("settings.cycle_monthly")
+	case model.BillingCycleCustom:
+		return translator.Text("settings.cycle_custom", map[string]any{"Day": cycle.ResetDay})
+	default:
+		return translator.Text("settings.cycle_daily")
+	}
 }
 
 func metricText(translator i18n.Translator, nameKey string, used uint64, metric quota.MetricStatus) string {

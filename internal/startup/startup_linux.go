@@ -29,7 +29,7 @@ func configure(enabled bool, executable string) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return fmt.Errorf("create Linux autostart directory: %w", err)
 	}
-	content := fmt.Sprintf("[Desktop Entry]\nType=Application\nVersion=1.0\nName=NetQuota\nComment=Track daily network usage\nExec=%s\nTerminal=false\nX-GNOME-Autostart-enabled=true\n", strconv.Quote(executable))
+	content := fmt.Sprintf("[Desktop Entry]\nType=Application\nVersion=1.0\nName=NetQuota\nComment=Track network usage\nExec=%s\nTerminal=false\nX-GNOME-Autostart-enabled=true\n", strconv.Quote(executable))
 	temporary, err := os.CreateTemp(filepath.Dir(path), ".netquota.desktop.tmp-*")
 	if err != nil {
 		return fmt.Errorf("create Linux autostart entry: %w", err)

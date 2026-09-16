@@ -1,9 +1,6 @@
 # Releasing NetQuota
 
-NetQuota is an open-source project. Releases are built from GitHub Actions;
-the workflow may create an internal draft while assembling artifacts, but the
-maintainer may publish a formal release directly after the automated and
-required manual gates pass.
+NetQuota is an open-source project. Releases are built from GitHub Actions; the workflow may create an internal draft while assembling artifacts, but the maintainer may publish a formal release directly after the automated and required manual gates pass.
 
 The project privacy notice is documented in [PRIVACY.md](../PRIVACY.md). Keep it aligned with any future network or telemetry behavior.
 
@@ -15,35 +12,17 @@ From WSL, start the manual workflow:
 gh workflow run draft-release.yml --ref main -f tag=v0.1.0-alpha.3
 ```
 
-The workflow runs checks on `windows-latest` and `ubuntu-latest`, including
-`govulncheck`, embeds the generated Windows ICO into the GUI executable with
-`go-winres`, and builds Windows and Linux packages. It then verifies the
-checksums and release metadata, installs and uninstalls the Windows package in
-a temporary directory, exercises the portable Windows and Linux CLI binaries,
-and creates a draft release only after every automated check passes. The
-maintainer should still install the draft Windows installer and run the Linux
-archive on real machines before publishing the release.
+The workflow runs checks on `windows-latest` and `ubuntu-latest`, including `govulncheck`, embeds the generated Windows ICO into the GUI executable with `go-winres`, and builds Windows and Linux packages. It then verifies the checksums and release metadata, installs and uninstalls the Windows package in a temporary directory, exercises the portable Windows and Linux CLI binaries, and creates a draft release only after every automated check passes. The maintainer should still install the draft Windows installer and run the Linux archive on real machines before publishing the release.
 
 `SHA256SUMS` is required by the in-app updater. Do not publish a release with a missing or stale manifest: it must contain the hashes of `netquota-windows-amd64.zip`, `netquota-windows-amd64-setup.exe`, and `netquota-linux-amd64.tar.gz`.
 
-For every release candidate that changes the tray or Settings UI, complete
-[docs/accessibility-checklist.md](accessibility-checklist.md) on a real Linux
-and Windows desktop. CI covers the automated keyboard, rendering, font, and
-theme regressions; it does not replace screen-reader or operating-system
-high-contrast checks.
+For every release candidate that changes the tray or Settings UI, complete [docs/accessibility-checklist.md](accessibility-checklist.md) on a real Linux and Windows desktop. CI covers the automated keyboard, rendering, font, and theme regressions; it does not replace screen-reader or operating-system high-contrast checks.
 
 ## Artifact provenance
 
-The release workflow produces GitHub Artifact Attestations with short-lived
-Sigstore certificates for every distributable package, `SHA256SUMS`, and
-`RELEASE-METADATA.json`. It cryptographically verifies those attestations
-before it creates the draft release; a missing or invalid attestation fails the
-workflow.
+The release workflow produces GitHub Artifact Attestations with short-lived Sigstore certificates for every distributable package, `SHA256SUMS`, and `RELEASE-METADATA.json`. It cryptographically verifies those attestations before it creates the draft release; a missing or invalid attestation fails the workflow.
 
-`RELEASE-METADATA.json` records the release tag, source commit, provenance
-predicate, repository, and whether the Windows artifacts are Authenticode
-signed. The release notes repeat the signing status so an unsigned release is
-never described as signed.
+`RELEASE-METADATA.json` records the release tag, source commit, provenance predicate, repository, and whether the Windows artifacts are Authenticode signed. The release notes repeat the signing status so an unsigned release is never described as signed.
 
 To independently verify a downloaded artifact, use a current GitHub CLI:
 
@@ -74,7 +53,7 @@ For a private certificate, add these repository secrets:
 - `WINDOWS_SIGNING_CERTIFICATE_BASE64`: the base64-encoded PFX certificate, including its private key
 - `WINDOWS_SIGNING_CERTIFICATE_PASSWORD`: the PFX password
 
-Optionally add the repository variable `WINDOWS_SIGNING_TIMESTAMP_URL`. If it is omitted, the workflow uses `http://timestamp.digicert.com`. Never commit a PFX file, certificate password, or private key to the repository.
+Optionally add the repository variable `WINDOWS_SIGNING_TIMESTAMP_URL`. If it is omitted, the workflow uses `http://timestamp.digicert.com`. Never commit a PFX file, certificate password, or private key to GitHub Actions.
 
 On a Windows machine, create the base64 value without putting the PFX in Git:
 
@@ -101,6 +80,7 @@ Do not publish a draft until the Windows and Linux real-machine checks are compl
 - the GUI executable, installer, and shortcuts display the NetQuota icon;
 - the Linux archive starts after its documented desktop dependencies are installed;
 - the tray menu shows total, download, and upload usage;
+- the dashboard shows the selected billing cycle and next reset, and Settings accepts daily, monthly, and custom reset-day cycles;
 - the installer can be completed in English, 正體中文, and 日本語, and 正體中文 is labelled exactly that way;
 - 正體中文 and 日本語 render without missing-glyph boxes in the application and installer;
 - the installer and portable package contain the same release version;

@@ -1,7 +1,7 @@
 <div align="center">
   <img src="assets/icon.svg" alt="NetQuota icon" width="128" height="128">
   <h1>NetQuota</h1>
-  <p>A private, local daily network-usage monitor for your system tray.</p>
+  <p>A private, local network-usage monitor for your system tray.</p>
   <p>
     <a href="https://github.com/KageRyo/netquota/releases/latest">Download the latest release</a>
     ·
@@ -15,23 +15,17 @@
 [![Latest release](https://img.shields.io/github/v/release/KageRyo/netquota?display_name=tag&sort=semver)](https://github.com/KageRyo/netquota/releases)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-NetQuota tracks the traffic reported by one network interface, keeps daily
-download and upload totals on your device, and warns you before a quota is
-reached. It is designed for people who want a lightweight desktop reminder—not
-a network-management service, packet inspector, or cloud account.
+NetQuota tracks the traffic reported by one network interface, keeps download and upload totals for your selected billing cycle on your device, and warns you before a quota is reached. It is designed for people who want a lightweight desktop reminder—not a network-management service, packet inspector, or cloud account.
 
 ## Install
 
 ### Windows (x64)
 
 1. Download [the Windows installer](https://github.com/KageRyo/netquota/releases/latest/download/netquota-windows-amd64-setup.exe).
-2. Run it and follow the setup wizard. The installer is available in English,
-   正體中文, and 日本語.
+2. Run it and follow the setup wizard. The installer is available in English, 正體中文, and 日本語.
 3. Open NetQuota from the Start menu. It will appear in the system tray.
 
-The installer creates an uninstaller and can optionally create a desktop
-shortcut. A portable ZIP is also available on the
-[release page](https://github.com/KageRyo/netquota/releases/latest).
+The installer creates an uninstaller and can optionally create a desktop shortcut. A portable ZIP is also available on the [release page](https://github.com/KageRyo/netquota/releases/latest).
 
 ### Linux (amd64)
 
@@ -44,19 +38,13 @@ shortcut. A portable ZIP is also available on the
    ./netquota
    ```
 
-NetQuota is a portable archive, not a `.deb`, AppImage, or distribution
-repository package. It needs a normal Linux desktop environment with the
-OpenGL/EGL, Wayland or X11 runtime libraries that Fyne uses.
+NetQuota is a portable archive, not a `.deb`, AppImage, or distribution repository package. It needs a normal Linux desktop environment with the OpenGL/EGL, Wayland or X11 runtime libraries that Fyne uses.
 
 ### Verify a download
 
-Each release includes a `SHA256SUMS` manifest for the Windows installer,
-Windows portable ZIP, and Linux archive. Download it from the same release if
-you need to verify an artifact before installing it.
+Each release includes a `SHA256SUMS` manifest for the Windows installer, Windows portable ZIP, and Linux archive. Download it from the same release if you need to verify an artifact before installing it.
 
-Releases also include `RELEASE-METADATA.json` and signed GitHub Artifact
-Attestations. With the GitHub CLI, you can verify the build provenance of a
-downloaded artifact:
+Releases also include `RELEASE-METADATA.json` and signed GitHub Artifact Attestations. With the GitHub CLI, you can verify the build provenance of a downloaded artifact:
 
 ```sh
 gh attestation verify netquota-linux-amd64.tar.gz --repo KageRyo/netquota
@@ -66,24 +54,19 @@ gh attestation verify netquota-linux-amd64.tar.gz --repo KageRyo/netquota
 
 1. Open **Settings** from the tray menu.
 2. Select the network interface to monitor.
-3. Set total, download, and upload quotas in GiB. Set a limit to `0` to
-   disable it.
-4. Choose alert percentages and, if you want, enable start-on-login.
+3. Choose a daily, calendar-monthly, or custom monthly billing cycle. For a custom cycle, choose a reset day from `1` to `31`; shorter months clamp the reset to their last calendar day.
+4. Set total, download, and upload quotas in GiB. Set a limit to `0` to disable it.
+5. Choose alert percentages and, if you want, enable start-on-login.
 
-NetQuota prefers the active default-route interface when no choice has been
-saved, and supports IPv6-only adapters. If a saved adapter disappears, NetQuota
-does not silently switch to another adapter; the dashboard directs you back to
-Settings. Changing the adapter requires confirmation and starts a new baseline.
+NetQuota prefers the active default-route interface when no choice has been saved, and supports IPv6-only adapters. If a saved adapter disappears, NetQuota does not silently switch to another adapter; the dashboard directs you back to Settings. Changing the adapter requires confirmation and starts a new baseline.
 
-The first successful sample creates the day's baseline. NetQuota cannot infer
-traffic that happened before that baseline, so give yourself a little margin
-below an externally enforced quota.
+The dashboard shows the active cycle and next reset. The first successful sample of each cycle creates a baseline; NetQuota cannot infer traffic that happened before that baseline or while the application was asleep across a boundary, so give yourself a little margin below an externally enforced quota.
 
 ## Highlights
 
-- Daily total, download, and upload accounting
+- Daily, calendar-monthly, and custom monthly total, download, and upload accounting
 - Independent quotas and notification thresholds for each direction
-- Local-time daily rollover, including after sleep or hibernation
+- Local-time calendar rollover with DST-safe boundaries and missed-sample handling
 - Counter-reset detection after a reboot or interface reconnect
 - Default-route preference with explicit recovery when a selected adapter is unavailable
 - IPv4 and IPv6 interface discovery
@@ -94,27 +77,19 @@ below an externally enforced quota.
 
 ## Languages and privacy
 
-Choose `English`, `正體中文`, or `日本語` in Settings at any time. The application
-language is saved separately from the Windows installer language.
+Choose `English`, `正體中文`, or `日本語` in Settings at any time. The application language is saved separately from the Windows installer language.
 
-Usage data and settings stay in per-user local configuration files. NetQuota
-does not inspect packets, upload your usage data, require administrator/root
-privileges, throttle traffic, or block connections. It does check GitHub for
-new published releases; see the [privacy policy](PRIVACY.md) for details.
+Usage data and settings stay in per-user local configuration files. NetQuota does not inspect packets, upload your usage data, require administrator/root privileges, throttle traffic, or block connections. It does check GitHub for new published releases; see the [privacy policy](PRIVACY.md) for details.
 
 ## What NetQuota measures
 
-NetQuota reads the operating system's cumulative receive and send counters for
-the selected interface. It is useful for personal awareness, but it is not an
-authoritative record from an ISP, school, gateway, or network administrator.
+NetQuota reads the operating system's cumulative receive and send counters for the selected interface. It is useful for personal awareness, but it is not an authoritative record from an ISP, school, gateway, or network administrator.
 
-It tracks one selected interface at a time. Traffic through a different
-adapter, VPN, or device is not included unless that interface is selected.
+It tracks one selected interface at a time. Traffic through a different adapter, VPN, or device is not included unless that interface is selected.
 
 ## Command line
 
-The graphical app is the normal way to use NetQuota. The same binary also
-provides a few commands for troubleshooting and automation:
+The graphical app is the normal way to use NetQuota. The same binary also provides a few commands for troubleshooting and automation:
 
 ```sh
 netquota --version
@@ -123,13 +98,11 @@ netquota --once
 netquota --headless
 ```
 
-Use `--config` and `--state` to provide custom paths when diagnosing a setup.
-Run `netquota --help` to see every option.
+Use `--config` and `--state` to provide custom paths when diagnosing a setup. Run `netquota --help` to see every option.
 
 ## Build from source
 
-Go 1.26 or newer is required. On Debian/Ubuntu-based Linux systems, install
-the desktop development libraries Fyne needs before building:
+Go 1.26 or newer is required. On Debian/Ubuntu-based Linux systems, install the desktop development libraries Fyne needs before building:
 
 ```sh
 sudo apt-get update
@@ -143,8 +116,7 @@ go run ./cmd/netquota
 go build -trimpath -o bin/netquota ./cmd/netquota
 ```
 
-For the full contributor workflow, required checks, and pull-request process,
-see [CONTRIBUTING.md](CONTRIBUTING.md).
+For the full contributor workflow, required checks, and pull-request process, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Project information
 

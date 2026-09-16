@@ -101,3 +101,64 @@ func TestTrackerPersistsAlertMarksInState(t *testing.T) {
 		t.Fatal("alert mark was not retained in tracker state")
 	}
 }
+
+func TestTrackerResetsAtMonthlyBoundaryAndBaselinesCounters(t *testing.T) {
+	t.Parallel()
+
+	tracker := NewTrackerWithCycle(model.State{}, model.BillingCycle{Kind: model.BillingCycleMonthly}, time.UTC)
+	before := time.Date(2026, 8, 31, 23, 0, 0, 0, time.UTC)
+	tracker.Apply(before, network.Counters{DownloadBytes: 100})
+	result := tracker.Apply(before.Add(2*time.Hour), network.Counters{DownloadBytes: 500})
+	if !result.NewPeriod || !result.Baseline {
+		t.Fatalf("monthly boundary result = %+v, want new-period baseline", result)
+	}
+	if result.Usage != (model.Usage{}) || result.Delta != (model.Usage{}) {
+		t.Fatalf("monthly boundary counted missed bytes: %+v", result)
+	}
+	if got, want := tracker.State().PeriodKey, "2026-09-01"; got != want {
+		t.Fatalf("period key = %q, want %q", got, want)
+	}
+
+	result = tracker.Apply(before.Add(3*time.Hour), network.Counters{DownloadBytes: 550})
+	if result.Baseline || result.Delta.DownloadBytes != 50 || result.Usage.DownloadBytes != 50 {
+		t.Fatalf("sample after monthly baseline = %+v", result)
+	}
+}
+
+func TestTrackerClearsAlertsAtCustomPeriodBoundary(t *testing.T) {
+	t.Parallel()
+
+	state := model.State{
+		Date:              "2026-08-15",
+		PeriodKey:         "2026-08-15",
+		BillingCycleKey:   "custom:15",
+		Usage:             model.Usage{DownloadBytes: 80},
+		Counters:          model.Counters{DownloadBytes: 100, Initialized: true},
+		AlertedThresholds: map[string]bool{"total:100:70": true},
+	}
+	tracker := NewTrackerWithCycle(state, model.BillingCycle{Kind: model.BillingCycleCustom, ResetDay: 15}, time.UTC)
+	result := tracker.Apply(time.Date(2026, 9, 15, 0, 0, 0, 0, time.UTC), network.Counters{DownloadBytes: 1000})
+	if !result.NewPeriod || !result.Baseline {
+		t.Fatalf("custom boundary result = %+v", result)
+	}
+	if len(tracker.State().AlertedThresholds) != 0 {
+		t.Fatalf("alert marks survived custom boundary: %v", tracker.State().AlertedThresholds)
+	}
+}
+
+func TestTrackerTreatsTimezoneChangeAsNewPeriodWhenKeyChanges(t *testing.T) {
+	t.Parallel()
+
+	newYork, err := time.LoadLocation("America/New_York")
+	if err != nil {
+		t.Skipf("timezone database unavailable: %v", err)
+	}
+	tracker := NewTrackerWithCycle(model.State{}, model.BillingCycle{Kind: model.BillingCycleDaily}, newYork)
+	instant := time.Date(2026, 9, 1, 0, 30, 0, 0, time.UTC)
+	tracker.Apply(instant, network.Counters{DownloadBytes: 100})
+	tracker.SetLocation(time.UTC)
+	result := tracker.Apply(instant.Add(10*time.Minute), network.Counters{DownloadBytes: 500})
+	if !result.NewPeriod || !result.Baseline || result.Usage != (model.Usage{}) {
+		t.Fatalf("timezone-change result = %+v, want a fresh baseline", result)
+	}
+}
