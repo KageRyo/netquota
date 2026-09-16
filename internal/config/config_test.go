@@ -20,6 +20,28 @@ func TestDefaultConfigIsValid(t *testing.T) {
 	if cfg.Language != i18n.English {
 		t.Fatalf("default language = %q, want %q", cfg.Language, i18n.English)
 	}
+	if cfg.BillingCycle.Kind != model.BillingCycleDaily {
+		t.Fatalf("default billing cycle = %q, want %q", cfg.BillingCycle.Kind, model.BillingCycleDaily)
+	}
+}
+
+func TestWithDefaultsMigratesV1ToDailyCycle(t *testing.T) {
+	t.Parallel()
+
+	cfg := WithDefaults(model.Config{
+		Version:             1,
+		PollIntervalSeconds: 5,
+		Quotas:              model.Quotas{Total: model.Limit{Bytes: BytesPerGiB}},
+	})
+	if cfg.Version != model.ConfigVersion {
+		t.Fatalf("migrated config version = %d, want %d", cfg.Version, model.ConfigVersion)
+	}
+	if cfg.BillingCycle != (model.BillingCycle{Kind: model.BillingCycleDaily}) {
+		t.Fatalf("migrated billing cycle = %+v, want daily", cfg.BillingCycle)
+	}
+	if cfg.Quotas.Total.Bytes != BytesPerGiB || cfg.PollIntervalSeconds != 5 {
+		t.Fatalf("migration changed existing values: %+v", cfg)
+	}
 }
 
 func TestWithDefaultsAddsThresholdsToEnabledLimits(t *testing.T) {
@@ -66,6 +88,27 @@ func TestValidateRejectsUnsupportedLanguage(t *testing.T) {
 	cfg.Language = "fr"
 	if err := Validate(cfg); err == nil {
 		t.Fatal("Validate accepted an unsupported language")
+	}
+}
+
+func TestValidateRejectsInvalidBillingCycles(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		name  string
+		cycle model.BillingCycle
+	}{
+		{name: "kind", cycle: model.BillingCycle{Kind: "weekly"}},
+		{name: "zero custom day", cycle: model.BillingCycle{Kind: model.BillingCycleCustom, ResetDay: 0}},
+		{name: "large custom day", cycle: model.BillingCycle{Kind: model.BillingCycleCustom, ResetDay: 32}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			cfg := Default()
+			cfg.BillingCycle = test.cycle
+			if err := Validate(cfg); err == nil {
+				t.Fatalf("Validate accepted billing cycle %+v", test.cycle)
+			}
+		})
 	}
 }
 

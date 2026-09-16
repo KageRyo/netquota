@@ -41,7 +41,13 @@ func (s Store) LoadState() (model.State, error) {
 	if err := readJSON(s.StatePath, &state); err != nil {
 		return model.State{}, err
 	}
-	if state.Version == 0 {
+	if state.Version < model.StateVersion {
+		if state.PeriodKey == "" {
+			state.PeriodKey = state.Date
+		}
+		if state.BillingCycleKey == "" {
+			state.BillingCycleKey = model.BillingCycle{Kind: model.BillingCycleDaily}.Identity()
+		}
 		state.Version = model.StateVersion
 	}
 	if state.Version != model.StateVersion {
@@ -54,7 +60,13 @@ func (s Store) LoadState() (model.State, error) {
 }
 
 func (s Store) SaveState(state model.State) error {
-	if state.Version == 0 {
+	if state.Version < model.StateVersion {
+		if state.PeriodKey == "" {
+			state.PeriodKey = state.Date
+		}
+		if state.BillingCycleKey == "" {
+			state.BillingCycleKey = model.BillingCycle{Kind: model.BillingCycleDaily}.Identity()
+		}
 		state.Version = model.StateVersion
 	}
 	return writeJSONAtomic(s.StatePath, state)

@@ -258,6 +258,89 @@ func TestMonitorLocalizesQuotaNotifications(t *testing.T) {
 	}
 }
 
+func TestMonitorResetsMonthlyPeriodsAndDeduplicatesAlertsPerPeriod(t *testing.T) {
+	t.Parallel()
+
+	cfg := model.Config{
+		Version:             model.ConfigVersion,
+		BillingCycle:        model.BillingCycle{Kind: model.BillingCycleMonthly},
+		PollIntervalSeconds: 1,
+		Quotas: model.Quotas{
+			Total: model.Limit{Bytes: 100, AlertPercentages: []uint8{70}},
+		},
+		Notifications: model.NotificationConfig{Enabled: true},
+	}
+	provider := &fakeProvider{interfaces: []network.Interface{{Name: "Ethernet"}}}
+	stateSaver := &fakeStateSaver{}
+	notifier := &fakeNotifier{}
+	monitor := NewMonitor(cfg, model.State{}, provider, nil, stateSaver, notifier, quietLogger())
+
+	before := time.Date(2026, 8, 31, 23, 0, 0, 0, time.Local)
+	provider.counters = network.Counters{DownloadBytes: 1}
+	first, err := monitor.Sample(context.Background(), before)
+	if err != nil {
+		t.Fatalf("first Sample: %v", err)
+	}
+	if !first.Baseline || first.NewPeriod || len(first.Alerts) != 0 {
+		t.Fatalf("first sample = %+v", first)
+	}
+
+	provider.counters = network.Counters{DownloadBytes: 100}
+	boundary, err := monitor.Sample(context.Background(), before.Add(2*time.Hour))
+	if err != nil {
+		t.Fatalf("boundary Sample: %v", err)
+	}
+	if !boundary.Baseline || !boundary.NewPeriod || len(boundary.Alerts) != 0 || len(notifier.notifications) != 0 {
+		t.Fatalf("monthly boundary sample = %+v notifications=%d", boundary, len(notifier.notifications))
+	}
+	if len(stateSaver.states) != 2 || stateSaver.states[1].PeriodKey != "2026-09-01" {
+		t.Fatalf("saved monthly state = %+v", stateSaver.states)
+	}
+
+	provider.counters = network.Counters{DownloadBytes: 170}
+	alert, err := monitor.Sample(context.Background(), before.Add(3*time.Hour))
+	if err != nil {
+		t.Fatalf("post-boundary Sample: %v", err)
+	}
+	if len(alert.Alerts) != 1 || len(notifier.notifications) != 1 {
+		t.Fatalf("post-boundary alerts = %+v notifications=%d", alert.Alerts, len(notifier.notifications))
+	}
+}
+
+func TestMonitorChangingBillingCycleStartsNewBaseline(t *testing.T) {
+	t.Parallel()
+
+	cfg := model.Config{Version: model.ConfigVersion, PollIntervalSeconds: 1}
+	provider := &fakeProvider{interfaces: []network.Interface{{Name: "Ethernet"}}, counters: network.Counters{DownloadBytes: 100}}
+	stateSaver := &fakeStateSaver{}
+	monitor := NewMonitor(cfg, model.State{}, provider, nil, stateSaver, nil, quietLogger())
+	when := time.Date(2026, 8, 21, 8, 0, 0, 0, time.Local)
+	if _, err := monitor.Sample(context.Background(), when); err != nil {
+		t.Fatalf("baseline Sample: %v", err)
+	}
+	provider.counters = network.Counters{DownloadBytes: 200}
+	if _, err := monitor.Sample(context.Background(), when.Add(time.Minute)); err != nil {
+		t.Fatalf("second Sample: %v", err)
+	}
+
+	updated := cfg
+	updated.BillingCycle = model.BillingCycle{Kind: model.BillingCycleMonthly}
+	if err := monitor.SetConfig(updated); err != nil {
+		t.Fatalf("SetConfig: %v", err)
+	}
+	provider.counters = network.Counters{DownloadBytes: 500}
+	result, err := monitor.Sample(context.Background(), when.Add(2*time.Minute))
+	if err != nil {
+		t.Fatalf("cycle-change Sample: %v", err)
+	}
+	if !result.Baseline || result.Usage != (model.Usage{}) {
+		t.Fatalf("cycle-change sample = %+v, want fresh baseline", result)
+	}
+	if len(stateSaver.states) != 4 || stateSaver.states[3].BillingCycleKey != "monthly" {
+		t.Fatalf("saved states after cycle change = %+v", stateSaver.states)
+	}
+}
+
 func quietLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(io.Discard, nil))
 }

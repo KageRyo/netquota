@@ -83,6 +83,9 @@ func TestStoreMigratesAndPersistsMissingLanguage(t *testing.T) {
 	if cfg.Language != i18n.English {
 		t.Fatalf("loaded language = %q, want %q", cfg.Language, i18n.English)
 	}
+	if cfg.Version != model.ConfigVersion || cfg.BillingCycle.Kind != model.BillingCycleDaily {
+		t.Fatalf("migrated config = %+v, want current daily config", cfg)
+	}
 	cfg.Language = i18n.Japanese
 	if err := store.SaveConfig(cfg); err != nil {
 		t.Fatalf("SaveConfig: %v", err)
@@ -93,5 +96,36 @@ func TestStoreMigratesAndPersistsMissingLanguage(t *testing.T) {
 	}
 	if !strings.Contains(string(contents), `"language": "ja"`) {
 		t.Fatalf("persisted config does not contain Japanese language: %s", contents)
+	}
+}
+
+func TestStoreMigratesV1StateToPeriodFields(t *testing.T) {
+	t.Parallel()
+
+	directory := t.TempDir()
+	statePath := filepath.Join(directory, "state.json")
+	legacy := `{
+  "version": 1,
+  "date": "2026-08-21",
+  "usage": {"download_bytes": 123, "upload_bytes": 45},
+  "counters": {"last_download_counter": 999, "last_upload_counter": 888, "initialized": true},
+  "alerted_thresholds": {"total:1:70": true}
+}`
+	if err := os.WriteFile(statePath, []byte(legacy), 0o600); err != nil {
+		t.Fatalf("write legacy state: %v", err)
+	}
+
+	state, err := (Store{StatePath: statePath}).LoadState()
+	if err != nil {
+		t.Fatalf("LoadState: %v", err)
+	}
+	if state.Version != model.StateVersion {
+		t.Fatalf("state version = %d, want %d", state.Version, model.StateVersion)
+	}
+	if state.PeriodKey != "2026-08-21" || state.BillingCycleKey != "daily" {
+		t.Fatalf("migrated period fields = period:%q cycle:%q", state.PeriodKey, state.BillingCycleKey)
+	}
+	if state.Usage.DownloadBytes != 123 || !state.AlertedThresholds["total:1:70"] {
+		t.Fatalf("state data was not retained: %+v", state)
 	}
 }

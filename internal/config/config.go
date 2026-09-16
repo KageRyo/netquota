@@ -20,8 +20,9 @@ var defaultAlertPercentages = []uint8{70, 85, 95, 100}
 
 func Default() model.Config {
 	return model.Config{
-		Version:  model.ConfigVersion,
-		Language: i18n.English,
+		Version:      model.ConfigVersion,
+		Language:     i18n.English,
+		BillingCycle: model.BillingCycle{Kind: model.BillingCycleDaily},
 		Quotas: model.Quotas{
 			Total: model.Limit{
 				Bytes:            DefaultTotalQuotaGiB * BytesPerGiB,
@@ -39,9 +40,10 @@ func Default() model.Config {
 // preserving explicitly supplied values.
 func WithDefaults(cfg model.Config) model.Config {
 	defaults := Default()
-	if cfg.Version == 0 {
+	if cfg.Version == 0 || cfg.Version < model.ConfigVersion {
 		cfg.Version = defaults.Version
 	}
+	cfg.BillingCycle = cfg.BillingCycle.Normalized()
 	if cfg.Language == "" {
 		cfg.Language = defaults.Language
 	}
@@ -69,6 +71,9 @@ func Validate(cfg model.Config) error {
 	}
 	if cfg.Language != "" && !cfg.Language.Valid() {
 		return i18n.NewError("error.language_invalid", nil)
+	}
+	if !cfg.BillingCycle.Valid() {
+		return errors.New("billing_cycle must be daily, monthly, or custom with reset_day from 1 to 31")
 	}
 	if err := validateLimit("total", cfg.Quotas.Total); err != nil {
 		return err

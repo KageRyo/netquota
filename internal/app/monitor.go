@@ -32,9 +32,11 @@ type Sample struct {
 	Quota         quota.Status
 	Alerts        []quota.Alert
 	NewDay        bool
+	NewPeriod     bool
 	Baseline      bool
 	DownloadReset bool
 	UploadReset   bool
+	Period        usage.Period
 }
 
 type Monitor struct {
@@ -58,6 +60,7 @@ func NewMonitor(
 	notifier notify.Notifier,
 	logger *slog.Logger,
 ) *Monitor {
+	cfg = config.WithDefaults(cfg)
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -66,7 +69,7 @@ func NewMonitor(
 	}
 	return &Monitor{
 		cfg:         cfg.Clone(),
-		tracker:     usage.NewTracker(state, time.Local),
+		tracker:     usage.NewTrackerWithCycle(state, cfg.BillingCycle, time.Local),
 		provider:    provider,
 		configSaver: configSaver,
 		stateSaver:  stateSaver,
@@ -94,9 +97,17 @@ func (m *Monitor) SetConfig(cfg model.Config) error {
 	}
 	m.mu.Lock()
 	interfaceChanged := !network.SameSelection(m.cfg.Interface, cfg.Interface)
+	cycleChanged := !m.cfg.BillingCycle.Equal(cfg.BillingCycle)
 	m.cfg = cfg.Clone()
-	if interfaceChanged {
-		m.tracker.ResetForInterface()
+	if cycleChanged {
+		m.tracker.SetCycle(cfg.BillingCycle)
+	}
+	if interfaceChanged || cycleChanged {
+		if interfaceChanged {
+			m.tracker.ResetForInterface()
+		} else {
+			m.tracker.ResetForBillingCycle()
+		}
 		m.selected = network.Interface{}
 	}
 	state := m.tracker.State()
@@ -107,7 +118,7 @@ func (m *Monitor) SetConfig(cfg model.Config) error {
 			return fmt.Errorf("save config: %w", err)
 		}
 	}
-	if interfaceChanged && m.stateSaver != nil {
+	if (interfaceChanged || cycleChanged) && m.stateSaver != nil {
 		if err := m.stateSaver.SaveState(state); err != nil {
 			return fmt.Errorf("save reset state: %w", err)
 		}
@@ -123,6 +134,7 @@ func (m *Monitor) Sample(ctx context.Context, now time.Time) (Sample, error) {
 	if err != nil {
 		return Sample{}, err
 	}
+	m.tracker.SetLocation(time.Local)
 	selection := m.cfg.Interface
 	if selection == (model.InterfaceSelection{}) && m.selected.Name != "" {
 		selection = network.SelectionForInterface(m.selected)
@@ -142,7 +154,7 @@ func (m *Monitor) Sample(ctx context.Context, now time.Time) (Sample, error) {
 	result := m.tracker.Apply(now, counters)
 	state := m.tracker.State()
 	alerts := make([]quota.Alert, 0)
-	if !result.Baseline && !result.NewDay {
+	if !result.Baseline && !result.NewPeriod {
 		alerts = quota.DetectAlerts(result.PreviousUsage, result.Usage, m.cfg.Quotas, state.AlertedThresholds)
 	}
 	for _, alert := range alerts {
@@ -176,9 +188,11 @@ func (m *Monitor) Sample(ctx context.Context, now time.Time) (Sample, error) {
 		Quota:         quota.Calculate(result.Usage, m.cfg.Quotas),
 		Alerts:        alerts,
 		NewDay:        result.NewDay,
+		NewPeriod:     result.NewPeriod,
 		Baseline:      result.Baseline,
 		DownloadReset: result.DownloadReset,
 		UploadReset:   result.UploadReset,
+		Period:        result.Period,
 	}, nil
 }
 

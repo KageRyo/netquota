@@ -14,37 +14,56 @@ type Result struct {
 	Usage         model.Usage
 	Delta         model.Usage
 	NewDay        bool
+	NewPeriod     bool
 	Baseline      bool
 	DownloadReset bool
 	UploadReset   bool
+	Period        Period
 }
 
 type Tracker struct {
 	state    model.State
+	cycle    model.BillingCycle
 	location *time.Location
 }
 
 func NewTracker(state model.State, location *time.Location) *Tracker {
+	return NewTrackerWithCycle(state, model.BillingCycle{Kind: model.BillingCycleDaily}, location)
+}
+
+func NewTrackerWithCycle(state model.State, cycle model.BillingCycle, location *time.Location) *Tracker {
 	if location == nil {
 		location = time.Local
 	}
+	cycle = cycle.Normalized()
 	state = state.Clone()
-	if state.Version == 0 {
+	if state.Version == 0 || state.Version < model.StateVersion {
 		state.Version = model.StateVersion
+	}
+	if state.PeriodKey == "" {
+		state.PeriodKey = state.Date
+	}
+	if state.BillingCycleKey == "" {
+		state.BillingCycleKey = model.BillingCycle{Kind: model.BillingCycleDaily}.Identity()
 	}
 	if state.AlertedThresholds == nil {
 		state.AlertedThresholds = make(map[string]bool)
 	}
-	return &Tracker{state: state, location: location}
+	return &Tracker{state: state, cycle: cycle, location: location}
 }
 
 func (t *Tracker) Apply(now time.Time, current network.Counters) Result {
 	now = now.In(t.location)
-	today := now.Format(DateLayout)
-	if t.state.Date == "" || t.state.Date != today {
+	period := CurrentPeriod(now, t.cycle, t.location)
+	previousPeriodKey := t.state.PeriodKey
+	cycleChanged := t.state.BillingCycleKey != t.cycle.Identity()
+	periodChanged := previousPeriodKey != "" && previousPeriodKey != period.Key
+	if previousPeriodKey == "" || periodChanged || cycleChanged {
 		previous := t.state.Usage
-		wasDifferentDay := t.state.Date != "" && t.state.Date != today
-		t.state.Date = today
+		newPeriod := previousPeriodKey != "" && (periodChanged || cycleChanged)
+		t.state.Date = period.Key
+		t.state.PeriodKey = period.Key
+		t.state.BillingCycleKey = t.cycle.Identity()
 		t.state.Usage = model.Usage{}
 		t.state.Counters = model.Counters{
 			DownloadBytes: current.DownloadBytes,
@@ -56,8 +75,10 @@ func (t *Tracker) Apply(now time.Time, current network.Counters) Result {
 		return Result{
 			PreviousUsage: previous,
 			Usage:         t.state.Usage,
-			NewDay:        wasDifferentDay,
+			NewDay:        newPeriod,
+			NewPeriod:     newPeriod,
 			Baseline:      true,
+			Period:        period,
 		}
 	}
 
@@ -72,6 +93,7 @@ func (t *Tracker) Apply(now time.Time, current network.Counters) Result {
 			PreviousUsage: t.state.Usage,
 			Usage:         t.state.Usage,
 			Baseline:      true,
+			Period:        period,
 		}
 	}
 
@@ -95,6 +117,7 @@ func (t *Tracker) Apply(now time.Time, current network.Counters) Result {
 		},
 		DownloadReset: downloadReset,
 		UploadReset:   uploadReset,
+		Period:        period,
 	}
 }
 
@@ -109,9 +132,34 @@ func (t *Tracker) MarkAlert(key string) {
 	t.state.AlertedThresholds[key] = true
 }
 
+// SetLocation refreshes the timezone used for the next calendar resolution.
+// The monitor calls this before every sample so an operating-system timezone
+// change is evaluated without reallocating historical usage.
+func (t *Tracker) SetLocation(location *time.Location) {
+	if location != nil {
+		t.location = location
+	}
+}
+
+func (t *Tracker) SetCycle(cycle model.BillingCycle) {
+	t.cycle = cycle.Normalized()
+}
+
 // ResetForInterface starts a new baseline when the user changes the tracked
 // interface. It avoids mixing counters from two different interfaces.
 func (t *Tracker) ResetForInterface() {
+	t.resetAccounting()
+}
+
+// ResetForBillingCycle starts a new baseline after an explicit cycle change.
+func (t *Tracker) ResetForBillingCycle() {
+	t.resetAccounting()
+}
+
+func (t *Tracker) resetAccounting() {
+	t.state.Date = ""
+	t.state.PeriodKey = ""
+	t.state.BillingCycleKey = t.cycle.Identity()
 	t.state.Usage = model.Usage{}
 	t.state.Counters = model.Counters{}
 	t.state.AlertedThresholds = make(map[string]bool)
