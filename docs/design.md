@@ -20,11 +20,8 @@ gopsutil interface counters
      CLI/tray   notify.Notifier
 ~~~
 
-- internal/network reads and resolves interfaces, platform stable indexes,
-  IPv4/IPv6 addresses, default-route metadata, and cumulative receive/send
-  counters. An unconfigured monitor prefers the active default route; a saved
-  interface never falls through to an unrelated adapter.
-- internal/usage turns cumulative counters into daily deltas, handles counter resets, and rolls over at the local date boundary.
+- internal/network reads and resolves interfaces, platform stable indexes, IPv4/IPv6 addresses, default-route metadata, and cumulative receive/send counters. An unconfigured monitor prefers the active default route; a saved interface never falls through to an unrelated adapter.
+- internal/usage turns cumulative counters into billing-cycle deltas, handles counter resets, and resolves daily/monthly/custom boundaries in the local calendar.
 - internal/quota evaluates total, download, and upload limits independently and produces threshold events.
 - internal/storage writes versioned JSON through a temporary file and rename.
 - internal/app coordinates sampling, state persistence, and notifications without knowing about Fyne widgets.
@@ -34,19 +31,19 @@ gopsutil interface counters
 
 ## State invariants
 
-1. The first sample for a date is a counter baseline; historical counter bytes are never added to that date.
+1. The first sample for a billing period is a counter baseline; historical counter bytes are never added to that period.
 2. A counter decrease contributes zero bytes for that direction and becomes the next baseline.
 3. Download and upload usage are accumulated separately. Total usage is their saturating sum.
 4. A zero-byte limit is disabled. Enabled limits must have ascending thresholds from 1% through 100%.
 5. Threshold keys include the dimension, configured limit, and percentage. A newly configured limit can therefore produce an event immediately when current usage is already beyond its threshold, without repeating an unchanged event.
-6. State is saved after every successful sample, including the alert marks for that sample.
+6. State is saved after every successful sample, including the period key and alert marks for that sample.
 
 ## Persistence
 
-Configuration and daily state are separate JSON files. Writes use:
+Configuration and billing-cycle state are separate JSON files. Writes use:
 
 ~~~text
 marshal → create temporary file in the target directory → flush → rename
 ~~~
 
-The files are user-local and are not part of the source tree. The state includes the local date, daily download/upload totals, last cumulative counters, and the alert keys already delivered for that date. If a saved interface disappears, sampling stops with an actionable localized status; changing to another interface requires explicit confirmation because traffic from the old interface cannot be reconstructed.
+The files are user-local and are not part of the source tree. The configuration migrates older versions to the daily cycle without changing quota values. State stores the local period key, billing-cycle identity, period download/upload totals, last cumulative counters, and alert keys already delivered for that period. Custom reset days clamp to the last day of shorter months. Boundary resolution uses calendar arithmetic in the current local timezone, while a missed boundary or timezone-induced period change starts a new counter baseline without retroactively allocating bytes. If a saved interface disappears, sampling stops with an actionable localized status; changing to another interface requires explicit confirmation because traffic from the old interface cannot be reconstructed.
