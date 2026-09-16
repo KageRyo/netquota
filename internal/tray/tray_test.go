@@ -238,8 +238,8 @@ func TestSettingsKeyboardTogglesCheckboxes(t *testing.T) {
 	view := newSettingsView(i18n.New(i18n.English), config.Default(), nil)
 	initialNotifications := view.notifications.Checked
 	initialStartup := view.startup.Checked
-	view.notifications.TypedKey(&fyne.KeyEvent{Name: fyne.KeySpace})
-	view.startup.TypedKey(&fyne.KeyEvent{Name: fyne.KeySpace})
+	view.notifications.TypedRune(' ')
+	view.startup.TypedRune(' ')
 	if view.notifications.Checked == initialNotifications || view.startup.Checked == initialStartup {
 		t.Fatalf("Space did not toggle checkboxes: notifications=%v startup=%v", view.notifications.Checked, view.startup.Checked)
 	}
