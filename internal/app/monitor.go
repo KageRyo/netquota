@@ -93,7 +93,7 @@ func (m *Monitor) SetConfig(cfg model.Config) error {
 		return err
 	}
 	m.mu.Lock()
-	interfaceChanged := m.cfg.Interface != cfg.Interface
+	interfaceChanged := !network.SameSelection(m.cfg.Interface, cfg.Interface)
 	m.cfg = cfg.Clone()
 	if interfaceChanged {
 		m.tracker.ResetForInterface()

@@ -134,13 +134,37 @@ func SelectionForInterface(iface Interface) model.InterfaceSelection {
 }
 
 func SameIdentity(left, right Interface) bool {
-	if left.Index != 0 && right.Index != 0 {
-		return left.Index == right.Index
+	if left.Name == "" && left.Index == 0 && left.HardwareAddress == "" && right.Name == "" && right.Index == 0 && right.HardwareAddress == "" {
+		return true
+	}
+	if left.Index != 0 && right.Index != 0 && left.Index == right.Index {
+		return true
+	}
+	if left.HardwareAddress != "" && right.HardwareAddress != "" && strings.EqualFold(left.HardwareAddress, right.HardwareAddress) {
+		return true
+	}
+	if left.Name == "" || left.Name != right.Name {
+		return false
 	}
 	if left.HardwareAddress != "" && right.HardwareAddress != "" {
-		return strings.EqualFold(left.HardwareAddress, right.HardwareAddress)
+		return false
 	}
-	return left.Name != "" && left.Name == right.Name
+	return true
+}
+
+func SameSelection(left, right model.InterfaceSelection) bool {
+	return SameIdentity(
+		Interface{
+			Name:            left.Name,
+			Index:           left.Index,
+			HardwareAddress: left.HardwareAddress,
+		},
+		Interface{
+			Name:            right.Name,
+			Index:           right.Index,
+			HardwareAddress: right.HardwareAddress,
+		},
+	)
 }
 
 func selectionConfigured(selection model.InterfaceSelection) bool {

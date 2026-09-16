@@ -120,6 +120,30 @@ func TestSelectRejectsSameNameWithChangedHardwareIdentity(t *testing.T) {
 	}
 }
 
+func TestSameSelectionIgnoresAddressRefresh(t *testing.T) {
+	t.Parallel()
+
+	left := model.InterfaceSelection{
+		Name:            "Wi-Fi",
+		Index:           7,
+		HardwareAddress: "AA:BB:CC:DD:EE:FF",
+		IPv4:            "192.0.2.10",
+	}
+	right := left
+	right.IPv4 = "192.0.2.11"
+	if !SameSelection(left, right) {
+		t.Fatal("SameSelection reported an address refresh as an interface change")
+	}
+}
+
+func TestSameSelectionTreatsTwoEmptySelectionsAsSame(t *testing.T) {
+	t.Parallel()
+
+	if !SameSelection(model.InterfaceSelection{}, model.InterfaceSelection{}) {
+		t.Fatal("SameSelection reported two empty selections as different")
+	}
+}
+
 func TestFirstIPv4IgnoresIPv6(t *testing.T) {
 	t.Parallel()
 
