@@ -55,6 +55,80 @@ func TestMetricTextShowsDisabledAndEnabledLimits(t *testing.T) {
 	}
 }
 
+func TestInterfaceTextUsesIPv6WhenIPv4IsMissing(t *testing.T) {
+	t.Parallel()
+
+	got := interfaceText(i18n.New(i18n.English), network.Interface{
+		Name: "Tunnel",
+		IPv6: "2001:db8::10",
+	})
+	if want := "Interface: Tunnel (2001:db8::10)"; got != want {
+		t.Fatalf("interface text = %q, want %q", got, want)
+	}
+}
+
+func TestInterfaceRecoveryMessagesAreLocalized(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		language    i18n.Language
+		unavailable string
+		choose      string
+		title       string
+		message     string
+	}{
+		{
+			language:    i18n.English,
+			unavailable: "Selected network interface is unavailable. Choose another interface in Settings.",
+			choose:      "Choose interface",
+			title:       "Change monitored interface?",
+			message:     "Traffic from the previous interface cannot be recovered. Reset the baseline and monitor Wi-Fi?",
+		},
+		{
+			language:    i18n.TraditionalChinese,
+			unavailable: "選取的網路介面目前無法使用。請在設定中選擇其他介面。",
+			choose:      "選擇網路介面",
+			title:       "要變更監測的網路介面嗎？",
+			message:     "無法復原先前介面的流量。要重設基準並監測 Wi-Fi 嗎？",
+		},
+		{
+			language:    i18n.Japanese,
+			unavailable: "選択したネットワークインターフェースは利用できません。設定で別のインターフェースを選択してください。",
+			choose:      "インターフェースを選択",
+			title:       "監視するインターフェースを変更しますか？",
+			message:     "以前のインターフェースの通信量は復元できません。基準値をリセットして Wi-Fi を監視しますか？",
+		},
+	} {
+		translator := i18n.New(test.language)
+		if got := translator.Text("error.interface_unavailable"); got != test.unavailable {
+			t.Fatalf("%s unavailable text = %q, want %q", test.language, got, test.unavailable)
+		}
+		if got := translator.Text("dashboard.choose_interface"); got != test.choose {
+			t.Fatalf("%s choose text = %q, want %q", test.language, got, test.choose)
+		}
+		if got := translator.Text("settings.rebaseline.title"); got != test.title {
+			t.Fatalf("%s rebaseline title = %q, want %q", test.language, got, test.title)
+		}
+		if got := translator.Text("settings.rebaseline.message", map[string]any{"Interface": "Wi-Fi"}); got != test.message {
+			t.Fatalf("%s rebaseline message = %q, want %q", test.language, got, test.message)
+		}
+	}
+}
+
+func TestInterfaceSelectionChangeRequiresRebaselineConfirmation(t *testing.T) {
+	t.Parallel()
+
+	current := model.InterfaceSelection{Name: "Wi-Fi", Index: 7, HardwareAddress: "AA", IPv4: "192.0.2.10"}
+	addressRefresh := current
+	addressRefresh.IPv4 = "192.0.2.11"
+	if interfaceSelectionChanged(current, addressRefresh) {
+		t.Fatal("an address refresh should not require re-baselining")
+	}
+	if !interfaceSelectionChanged(current, model.InterfaceSelection{Name: "Ethernet", Index: 8, HardwareAddress: "BB"}) {
+		t.Fatal("changing the interface should require re-baselining")
+	}
+}
+
 func TestReadSettingsKeepsInterfaceIdentity(t *testing.T) {
 	t.Parallel()
 
@@ -64,7 +138,7 @@ func TestReadSettingsKeepsInterfaceIdentity(t *testing.T) {
 		model.Config{Version: model.ConfigVersion, PollIntervalSeconds: 2},
 		languageWidget,
 		selectWidget,
-		map[string]network.Interface{"Ethernet": {Name: "Ethernet", HardwareAddress: "AA", IPv4: "192.0.2.10"}},
+		map[string]network.Interface{"Ethernet": {Name: "Ethernet", Index: 3, HardwareAddress: "AA", IPv4: "192.0.2.10", IPv6: "2001:db8::10"}},
 		entryForTest("100"), entryForTest("70,95,100"),
 		entryForTest("10"), entryForTest("90"),
 		entryForTest("5"), entryForTest("90"),
@@ -73,7 +147,7 @@ func TestReadSettingsKeepsInterfaceIdentity(t *testing.T) {
 	if err != nil {
 		t.Fatalf("readSettings: %v", err)
 	}
-	if updated.Interface.Name != "Ethernet" || updated.Interface.HardwareAddress != "AA" || updated.Interface.IPv4 != "192.0.2.10" {
+	if updated.Interface.Name != "Ethernet" || updated.Interface.Index != 3 || updated.Interface.HardwareAddress != "AA" || updated.Interface.IPv4 != "192.0.2.10" || updated.Interface.IPv6 != "2001:db8::10" {
 		t.Fatalf("interface = %+v", updated.Interface)
 	}
 	if !updated.Notifications.Enabled || updated.StartOnLogin {

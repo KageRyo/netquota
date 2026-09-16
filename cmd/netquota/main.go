@@ -155,7 +155,15 @@ func listAvailableInterfaces(provider network.Provider) {
 		fatal(err)
 	}
 	for _, iface := range interfaces {
-		fmt.Printf("%-20s IPv4=%-15s MAC=%s\n", iface.Name, iface.IPv4, iface.HardwareAddress)
+		address := iface.IPv4
+		if address == "" {
+			address = iface.IPv6
+		}
+		route := ""
+		if iface.DefaultRoute {
+			route = "default-route"
+		}
+		fmt.Printf("%-20s Index=%-5d Address=%-39s MAC=%-17s %s\n", iface.Name, iface.Index, address, iface.HardwareAddress, route)
 	}
 }
 

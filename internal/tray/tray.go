@@ -158,6 +158,7 @@ type ui struct {
 	uploadLabel    *widget.Label
 	totalLabel     *widget.Label
 	remainingLabel *widget.Label
+	reselectButton *widget.Button
 	trayMenu       *trayMenu
 	updateChecker  updateapp.Checker
 }
@@ -211,6 +212,9 @@ func (u *ui) setLanguage(language i18n.Language) {
 func (u *ui) dashboard() fyne.CanvasObject {
 	settingsButton := widget.NewButtonWithIcon(u.translator.Text("dashboard.settings"), theme.SettingsIcon(), u.showSettings)
 	quitButton := widget.NewButtonWithIcon(u.translator.Text("dashboard.quit"), theme.CancelIcon(), u.application.Quit)
+	reselectButton := widget.NewButtonWithIcon(u.translator.Text("dashboard.choose_interface"), theme.SettingsIcon(), u.showSettings)
+	reselectButton.Hide()
+	u.reselectButton = reselectButton
 	buttons := container.NewGridWithColumns(2, settingsButton, quitButton)
 	content := container.NewVBox(
 		widget.NewLabelWithStyle("NetQuota v"+version.Value, fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
@@ -224,8 +228,10 @@ func (u *ui) dashboard() fyne.CanvasObject {
 		u.totalLabel,
 		u.remainingLabel,
 		widget.NewSeparator(),
+		reselectButton,
 		buttons,
 	)
+	u.refreshDashboardLabels()
 	return container.NewPadded(content)
 }
 
@@ -252,7 +258,11 @@ func (u *ui) sample(ctx context.Context) {
 	fyne.Do(func() {
 		if err != nil {
 			u.lastSample = nil
-			u.lastError = i18n.WrapError("error.monitoring_failed", err, nil)
+			if errors.Is(err, network.ErrSelectedInterfaceUnavailable) {
+				u.lastError = i18n.WrapError("error.interface_unavailable", err, nil)
+			} else {
+				u.lastError = i18n.WrapError("error.monitoring_failed", err, nil)
+			}
 			u.refreshDashboardLabels()
 			return
 		}
@@ -264,10 +274,23 @@ func (u *ui) sample(ctx context.Context) {
 
 func (u *ui) refreshDashboardLabels() {
 	if u.lastError != nil {
+		if u.reselectButton != nil {
+			if errors.Is(u.lastError, network.ErrSelectedInterfaceUnavailable) {
+				u.reselectButton.Show()
+			} else {
+				u.reselectButton.Hide()
+			}
+		}
+		if errors.Is(u.lastError, network.ErrSelectedInterfaceUnavailable) {
+			u.interfaceLabel.SetText(u.translator.Text("dashboard.interface.unavailable"))
+		}
 		u.statusLabel.SetText(u.translator.Text("status.error", map[string]any{"Error": u.translator.ErrorText(u.lastError)}))
 		u.statusLabel.Importance = widget.WarningImportance
 		u.statusLabel.Refresh()
 		return
+	}
+	if u.reselectButton != nil {
+		u.reselectButton.Hide()
 	}
 	if u.lastSample == nil {
 		u.interfaceLabel.SetText(u.translator.Text("dashboard.interface.waiting"))
@@ -529,6 +552,18 @@ func (u *ui) showSettings() {
 		options = append(options, iface.Name)
 		byName[iface.Name] = iface
 	}
+	if cfg.Interface.Name != "" {
+		if _, ok := byName[cfg.Interface.Name]; !ok {
+			options = append(options, cfg.Interface.Name)
+			byName[cfg.Interface.Name] = network.Interface{
+				Name:            cfg.Interface.Name,
+				Index:           cfg.Interface.Index,
+				HardwareAddress: cfg.Interface.HardwareAddress,
+				IPv4:            cfg.Interface.IPv4,
+				IPv6:            cfg.Interface.IPv6,
+			}
+		}
+	}
 	interfaceSelect := widget.NewSelect(options, nil)
 	interfaceSelect.PlaceHolder = u.translator.Text("settings.choose_interface")
 	if cfg.Interface.Name != "" {
@@ -568,12 +603,7 @@ func (u *ui) showSettings() {
 	form.Append(u.translator.Text("settings.notifications"), notifications)
 	form.Append(u.translator.Text("settings.startup"), startOnLogin)
 	form.OnCancel = func() { u.window.SetContent(u.dashboard()) }
-	form.OnSubmit = func() {
-		updated, err := readSettings(cfg, languageSelect, interfaceSelect, byName, totalQuota, totalThresholds, downloadQuota, downloadThresholds, uploadQuota, uploadThresholds, notifications, startOnLogin)
-		if err != nil {
-			u.showError(err)
-			return
-		}
+	saveSettings := func(updated model.Config) {
 		if err := u.monitor.SetConfig(updated); err != nil {
 			u.showError(i18n.WrapError("settings.save_failed", err, nil))
 			return
@@ -585,9 +615,33 @@ func (u *ui) showSettings() {
 		u.setLanguage(updated.Language)
 		u.window.SetContent(u.dashboard())
 	}
+	form.OnSubmit = func() {
+		updated, err := readSettings(cfg, languageSelect, interfaceSelect, byName, totalQuota, totalThresholds, downloadQuota, downloadThresholds, uploadQuota, uploadThresholds, notifications, startOnLogin)
+		if err != nil {
+			u.showError(err)
+			return
+		}
+		if interfaceSelectionChanged(cfg.Interface, updated.Interface) {
+			u.showConfirm(
+				u.translator.Text("settings.rebaseline.title"),
+				u.translator.Text("settings.rebaseline.message", map[string]any{"Interface": updated.Interface.Name}),
+				func(confirmed bool) {
+					if confirmed {
+						saveSettings(updated)
+					}
+				},
+			)
+			return
+		}
+		saveSettings(updated)
+	}
 	back := widget.NewButtonWithIcon(u.translator.Text("app.back"), theme.NavigateBackIcon(), func() { u.window.SetContent(u.dashboard()) })
 	u.window.SetContent(container.NewBorder(back, nil, nil, nil, container.NewVScroll(form)))
 	u.window.Show()
+}
+
+func interfaceSelectionChanged(current, updated model.InterfaceSelection) bool {
+	return !network.SameSelection(current, updated)
 }
 
 func readSettings(
@@ -618,8 +672,10 @@ func readSettings(
 	if selected, ok := byName[interfaceSelect.Selected]; ok {
 		cfg.Interface = model.InterfaceSelection{
 			Name:            selected.Name,
+			Index:           selected.Index,
 			HardwareAddress: selected.HardwareAddress,
 			IPv4:            selected.IPv4,
+			IPv6:            selected.IPv6,
 		}
 	}
 	cfg.Notifications.Enabled = notifications.Checked
@@ -640,10 +696,13 @@ func parseLimit(quotaInput, thresholdInput string) (model.Limit, error) {
 }
 
 func interfaceText(translator i18n.Translator, iface network.Interface) string {
-	if iface.IPv4 == "" {
-		return translator.Text("metric.interface", map[string]any{"Name": iface.Name})
+	if iface.IPv4 != "" {
+		return translator.Text("metric.interface_ipv4", map[string]any{"Name": iface.Name, "IPv4": iface.IPv4})
 	}
-	return translator.Text("metric.interface_ipv4", map[string]any{"Name": iface.Name, "IPv4": iface.IPv4})
+	if iface.IPv6 != "" {
+		return translator.Text("metric.interface_ipv6", map[string]any{"Name": iface.Name, "IPv6": iface.IPv6})
+	}
+	return translator.Text("metric.interface", map[string]any{"Name": iface.Name})
 }
 
 func metricText(translator i18n.Translator, nameKey string, used uint64, metric quota.MetricStatus) string {
