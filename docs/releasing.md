@@ -1,6 +1,9 @@
 # Releasing NetQuota
 
-NetQuota is an open-source project. Releases are built from GitHub Actions and must be inspected as a draft before they are published.
+NetQuota is an open-source project. Releases are built from GitHub Actions;
+the workflow may create an internal draft while assembling artifacts, but the
+maintainer may publish a formal release directly after the automated and
+required manual gates pass.
 
 The project privacy notice is documented in [PRIVACY.md](../PRIVACY.md). Keep it aligned with any future network or telemetry behavior.
 

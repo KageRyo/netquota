@@ -20,7 +20,10 @@ gopsutil interface counters
      CLI/tray   notify.Notifier
 ~~~
 
-- internal/network reads and resolves interfaces and cumulative receive/send counters.
+- internal/network reads and resolves interfaces, platform stable indexes,
+  IPv4/IPv6 addresses, default-route metadata, and cumulative receive/send
+  counters. An unconfigured monitor prefers the active default route; a saved
+  interface never falls through to an unrelated adapter.
 - internal/usage turns cumulative counters into daily deltas, handles counter resets, and rolls over at the local date boundary.
 - internal/quota evaluates total, download, and upload limits independently and produces threshold events.
 - internal/storage writes versioned JSON through a temporary file and rename.
@@ -46,4 +49,4 @@ Configuration and daily state are separate JSON files. Writes use:
 marshal → create temporary file in the target directory → flush → rename
 ~~~
 
-The files are user-local and are not part of the source tree. The state includes the local date, daily download/upload totals, last cumulative counters, and the alert keys already delivered for that date.
+The files are user-local and are not part of the source tree. The state includes the local date, daily download/upload totals, last cumulative counters, and the alert keys already delivered for that date. If a saved interface disappears, sampling stops with an actionable localized status; changing to another interface requires explicit confirmation because traffic from the old interface cannot be reconstructed.
