@@ -70,6 +70,11 @@ gh attestation verify netquota-linux-amd64.tar.gz --repo KageRyo/netquota
    disable it.
 4. Choose alert percentages and, if you want, enable start-on-login.
 
+NetQuota prefers the active default-route interface when no choice has been
+saved, and supports IPv6-only adapters. If a saved adapter disappears, NetQuota
+does not silently switch to another adapter; the dashboard directs you back to
+Settings. Changing the adapter requires confirmation and starts a new baseline.
+
 The first successful sample creates the day's baseline. NetQuota cannot infer
 traffic that happened before that baseline, so give yourself a little margin
 below an externally enforced quota.
@@ -80,6 +85,8 @@ below an externally enforced quota.
 - Independent quotas and notification thresholds for each direction
 - Local-time daily rollover, including after sleep or hibernation
 - Counter-reset detection after a reboot or interface reconnect
+- Default-route preference with explicit recovery when a selected adapter is unavailable
+- IPv4 and IPv6 interface discovery
 - Optional start-on-login on Windows and Linux
 - User-confirmed updates with downloaded-artifact checksum verification
 - English, 正體中文, and 日本語 interfaces with bundled CJK fonts

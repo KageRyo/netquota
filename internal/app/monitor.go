@@ -93,7 +93,7 @@ func (m *Monitor) SetConfig(cfg model.Config) error {
 		return err
 	}
 	m.mu.Lock()
-	interfaceChanged := m.cfg.Interface != cfg.Interface
+	interfaceChanged := !network.SameSelection(m.cfg.Interface, cfg.Interface)
 	m.cfg = cfg.Clone()
 	if interfaceChanged {
 		m.tracker.ResetForInterface()
@@ -123,11 +123,15 @@ func (m *Monitor) Sample(ctx context.Context, now time.Time) (Sample, error) {
 	if err != nil {
 		return Sample{}, err
 	}
-	selected, err := network.Select(m.cfg.Interface, interfaces)
+	selection := m.cfg.Interface
+	if selection == (model.InterfaceSelection{}) && m.selected.Name != "" {
+		selection = network.SelectionForInterface(m.selected)
+	}
+	selected, err := network.Select(selection, interfaces)
 	if err != nil {
 		return Sample{}, err
 	}
-	if m.selected.Name != "" && (m.selected.Name != selected.Name || m.selected.HardwareAddress != selected.HardwareAddress) {
+	if m.selected.Name != "" && !network.SameIdentity(m.selected, selected) {
 		m.tracker.ResetForInterface()
 	}
 	m.selected = selected

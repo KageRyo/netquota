@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"io"
 	"log/slog"
 	"testing"
@@ -129,6 +130,98 @@ func TestMonitorChangingInterfaceStartsNewBaseline(t *testing.T) {
 	}
 	if !result.Baseline || result.Usage != (model.Usage{}) {
 		t.Fatalf("sample after interface change = %+v", result)
+	}
+}
+
+func TestMonitorDoesNotFallbackWhenSavedInterfaceUnavailable(t *testing.T) {
+	t.Parallel()
+
+	cfg := model.Config{
+		Version:             model.ConfigVersion,
+		PollIntervalSeconds: 1,
+		Interface: model.InterfaceSelection{
+			Name:            "Wi-Fi",
+			HardwareAddress: "AA:BB:CC:DD:EE:FF",
+		},
+	}
+	provider := &fakeProvider{interfaces: []network.Interface{{Name: "Ethernet", IPv4: "192.0.2.20"}}}
+	stateSaver := &fakeStateSaver{}
+	monitor := NewMonitor(cfg, model.State{}, provider, nil, stateSaver, nil, quietLogger())
+
+	_, err := monitor.Sample(context.Background(), time.Date(2026, 8, 21, 8, 0, 0, 0, time.Local))
+	if !errors.Is(err, network.ErrSelectedInterfaceUnavailable) {
+		t.Fatalf("Sample error = %v, want ErrSelectedInterfaceUnavailable", err)
+	}
+	if len(stateSaver.states) != 0 {
+		t.Fatalf("state saves = %d, want 0 while interface is unavailable", len(stateSaver.states))
+	}
+}
+
+func TestMonitorRetainsAutomaticInterfaceWhenDefaultRouteChanges(t *testing.T) {
+	t.Parallel()
+
+	cfg := model.Config{Version: model.ConfigVersion, PollIntervalSeconds: 1}
+	provider := &fakeProvider{interfaces: []network.Interface{
+		{Name: "VPN", Index: 2, IPv4: "10.8.0.2"},
+		{Name: "Wi-Fi", Index: 1, HardwareAddress: "AA", IPv4: "192.0.2.10", DefaultRoute: true},
+	}}
+	monitor := NewMonitor(cfg, model.State{}, provider, nil, nil, nil, quietLogger())
+	when := time.Date(2026, 8, 21, 8, 0, 0, 0, time.Local)
+	provider.counters = network.Counters{DownloadBytes: 100}
+	first, err := monitor.Sample(context.Background(), when)
+	if err != nil {
+		t.Fatalf("first Sample: %v", err)
+	}
+	if first.Interface.Name != "Wi-Fi" || !first.Baseline {
+		t.Fatalf("first sample = %+v, want Wi-Fi baseline", first)
+	}
+
+	provider.interfaces = []network.Interface{
+		{Name: "VPN", Index: 2, IPv4: "10.8.0.2", DefaultRoute: true},
+		{Name: "Wi-Fi", Index: 1, HardwareAddress: "AA", IPv4: "192.0.2.10"},
+	}
+	provider.counters = network.Counters{DownloadBytes: 150}
+	second, err := monitor.Sample(context.Background(), when.Add(time.Minute))
+	if err != nil {
+		t.Fatalf("second Sample: %v", err)
+	}
+	if second.Interface.Name != "Wi-Fi" {
+		t.Fatalf("second interface = %q, want Wi-Fi", second.Interface.Name)
+	}
+	if second.Baseline || second.Usage.DownloadBytes != 50 {
+		t.Fatalf("second sample = %+v, want 50-byte continuation", second)
+	}
+}
+
+func TestMonitorReappearingInterfaceTreatsLowerCounterAsReset(t *testing.T) {
+	t.Parallel()
+
+	cfg := model.Config{
+		Version:             model.ConfigVersion,
+		PollIntervalSeconds: 1,
+		Interface:           model.InterfaceSelection{Name: "Wi-Fi", HardwareAddress: "AA"},
+	}
+	provider := &fakeProvider{interfaces: []network.Interface{{Name: "Wi-Fi", HardwareAddress: "AA", IPv4: "192.0.2.10"}}}
+	monitor := NewMonitor(cfg, model.State{}, provider, nil, nil, nil, quietLogger())
+	when := time.Date(2026, 8, 21, 8, 0, 0, 0, time.Local)
+	provider.counters = network.Counters{DownloadBytes: 100}
+	monitor.Sample(context.Background(), when)
+	provider.counters = network.Counters{DownloadBytes: 150}
+	monitor.Sample(context.Background(), when.Add(time.Minute))
+
+	provider.interfaces = nil
+	if _, err := monitor.Sample(context.Background(), when.Add(2*time.Minute)); !errors.Is(err, network.ErrSelectedInterfaceUnavailable) {
+		t.Fatalf("missing-interface error = %v, want ErrSelectedInterfaceUnavailable", err)
+	}
+
+	provider.interfaces = []network.Interface{{Name: "Wi-Fi", HardwareAddress: "AA", IPv4: "192.0.2.10"}}
+	provider.counters = network.Counters{DownloadBytes: 10}
+	result, err := monitor.Sample(context.Background(), when.Add(3*time.Minute))
+	if err != nil {
+		t.Fatalf("reappearing Sample: %v", err)
+	}
+	if !result.DownloadReset || result.Usage.DownloadBytes != 50 {
+		t.Fatalf("reappearing sample = %+v, want reset with unchanged usage", result)
 	}
 }
 
