@@ -13,12 +13,14 @@ const (
 )
 
 // InterfaceSelection identifies the network interface that should be tracked.
-// Name is the primary selector; hardware address and IPv4 are retained to make
-// reconnects and renamed interfaces easier to resolve.
+// Index and hardware address are preferred stable identities. Name and
+// addresses remain for backwards-compatible configuration and legacy hosts.
 type InterfaceSelection struct {
 	Name            string `json:"name"`
+	Index           int    `json:"index"`
 	HardwareAddress string `json:"hardware_address"`
 	IPv4            string `json:"ipv4"`
+	IPv6            string `json:"ipv6"`
 }
 
 // Limit describes one independently configurable quota and its notification
