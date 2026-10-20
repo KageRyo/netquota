@@ -1,6 +1,6 @@
 module github.com/KageRyo/netquota
 
-go 1.26.6
+go 1.26.9
 
 require (
 	fyne.io/fyne/v2 v2.8.1
@@ -49,6 +49,6 @@ require (
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
 	golang.org/x/image v0.43.0 // indirect
-	golang.org/x/net v0.55.0 // indirect
-	golang.org/x/text v0.38.0 // indirect
+	golang.org/x/net v0.60.0 // indirect
+	golang.org/x/text v0.42.0 // indirect
 )
