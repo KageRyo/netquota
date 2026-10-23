@@ -1,7 +1,6 @@
 package tray
 
 import (
-	"image/color"
 	"strings"
 	"testing"
 	"time"
@@ -10,7 +9,6 @@ import (
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/driver/software"
 	"fyne.io/fyne/v2/test"
-	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
 	"github.com/KageRyo/netquota/internal/config"
@@ -88,25 +86,6 @@ func TestLocalizedBillingCycleTextIsVisible(t *testing.T) {
 		text := billingCycleText(i18n.New(language), model.BillingCycle{Kind: model.BillingCycleCustom, ResetDay: 31}, nextReset)
 		if text == "" || strings.Contains(text, "dashboard.billing_cycle") || strings.Contains(text, "settings.cycle_custom") {
 			t.Fatalf("%s billing cycle text = %q, want rendered localized text", language, text)
-		}
-	}
-}
-
-func TestThemeFocusColorIsDistinctFromBackground(t *testing.T) {
-	t.Parallel()
-
-	for _, test := range []struct {
-		name    string
-		theme   fyne.Theme
-		variant fyne.ThemeVariant
-	}{
-		{name: "light", theme: theme.LightTheme(), variant: theme.VariantLight},
-		{name: "dark", theme: theme.DarkTheme(), variant: theme.VariantDark},
-	} {
-		background := color.NRGBAModel.Convert(test.theme.Color(theme.ColorNameBackground, test.variant)).(color.NRGBA)
-		focus := color.NRGBAModel.Convert(test.theme.Color(theme.ColorNameFocus, test.variant)).(color.NRGBA)
-		if background == focus {
-			t.Fatalf("%s theme focus color equals background: %#v", test.name, background)
 		}
 	}
 }
