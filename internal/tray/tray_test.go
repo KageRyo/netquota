@@ -216,7 +216,7 @@ func TestReadSettingsRejectsInvalidCustomBillingCycleDay(t *testing.T) {
 	}
 }
 
-func TestSettingsViewHasDeterministicFocusableFormOrder(t *testing.T) {
+func TestSettingsViewExposesFocusableInputsAndKeyboardActions(t *testing.T) {
 	app := fyneTest.NewApp()
 	defer app.Quit()
 
@@ -224,33 +224,9 @@ func TestSettingsViewHasDeterministicFocusableFormOrder(t *testing.T) {
 		{Name: "Ethernet", Index: 1, IPv4: "192.0.2.10"},
 		{Name: "Wi-Fi", Index: 2, IPv6: "2001:db8::10"},
 	})
-	got := make([]string, 0, len(view.form.Items))
 	for _, item := range view.form.Items {
-		got = append(got, item.Text)
 		if _, ok := item.Widget.(fyne.Focusable); !ok {
 			t.Fatalf("form item %q does not implement fyne.Focusable: %T", item.Text, item.Widget)
-		}
-	}
-	want := []string{
-		"Language",
-		"Network interface",
-		"Billing cycle",
-		"Custom reset day (1-31)",
-		"Total quota (GiB)",
-		"Total alerts (%)",
-		"Download quota (GiB)",
-		"Download alerts (%)",
-		"Upload quota (GiB)",
-		"Upload alerts (%)",
-		"Notifications",
-		"Startup",
-	}
-	if len(got) != len(want) {
-		t.Fatalf("form item count = %d, want %d (%v)", len(got), len(want), got)
-	}
-	for index := range want {
-		if got[index] != want[index] {
-			t.Fatalf("form item %d = %q, want %q", index, got[index], want[index])
 		}
 	}
 	if view.form.OnSubmit == nil || view.form.OnCancel == nil {

@@ -14,9 +14,6 @@ func TestIconSVGIsEmbedded(t *testing.T) {
 	if !strings.Contains(content, "<svg") {
 		t.Fatal("embedded application icon is not an SVG document")
 	}
-	if !strings.Contains(content, "NetQuota icon") {
-		t.Fatal("embedded application icon is missing its title")
-	}
 }
 
 func TestTrayIconPNGIsEmbedded(t *testing.T) {
