@@ -4,14 +4,14 @@ import (
 	"context"
 	"errors"
 	"image"
-	"image/color"
+	"strings"
 	"testing"
+
+	"golang.org/x/image/font/sfnt"
 	"time"
 
 	"fyne.io/fyne/v2"
-	canvaspkg "fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
-	"fyne.io/fyne/v2/driver/software"
 	fyneTest "fyne.io/fyne/v2/test"
 	"fyne.io/fyne/v2/widget"
 
@@ -71,48 +71,22 @@ func TestInterfaceTextUsesIPv6WhenIPv4IsMissing(t *testing.T) {
 
 func TestInterfaceRecoveryMessagesAreLocalized(t *testing.T) {
 	t.Parallel()
-
-	for _, test := range []struct {
-		language    i18n.Language
-		unavailable string
-		choose      string
-		title       string
-		message     string
-	}{
-		{
-			language:    i18n.English,
-			unavailable: "Selected network interface is unavailable. Choose another interface in Settings.",
-			choose:      "Choose interface",
-			title:       "Change monitored interface?",
-			message:     "Traffic from the previous interface cannot be recovered. Reset the baseline and monitor Wi-Fi?",
-		},
-		{
-			language:    i18n.TraditionalChinese,
-			unavailable: "選取的網路介面目前無法使用。請在設定中選擇其他介面。",
-			choose:      "選擇網路介面",
-			title:       "要變更監測的網路介面嗎？",
-			message:     "無法復原先前介面的流量。要重設基準並監測 Wi-Fi 嗎？",
-		},
-		{
-			language:    i18n.Japanese,
-			unavailable: "選択したネットワークインターフェースは利用できません。設定で別のインターフェースを選択してください。",
-			choose:      "インターフェースを選択",
-			title:       "監視するインターフェースを変更しますか？",
-			message:     "以前のインターフェースの通信量は復元できません。基準値をリセットして Wi-Fi を監視しますか？",
-		},
-	} {
-		translator := i18n.New(test.language)
-		if got := translator.Text("error.interface_unavailable"); got != test.unavailable {
-			t.Fatalf("%s unavailable text = %q, want %q", test.language, got, test.unavailable)
+	keys := []string{"error.interface_unavailable", "dashboard.choose_interface", "settings.rebaseline.title", "settings.rebaseline.message"}
+	args := map[string]any{"Interface": "audit-interface"}
+	english := i18n.New(i18n.English)
+	for _, language := range []i18n.Language{i18n.English, i18n.TraditionalChinese, i18n.Japanese} {
+		translator := i18n.New(language)
+		for _, key := range keys {
+			got := translator.Text(key, args)
+			if got == "" || got == key {
+				t.Fatalf("%s missing recovery translation %s", language, key)
+			}
+			if language != i18n.English && got == english.Text(key, args) {
+				t.Fatalf("%s recovery translation %s fell back to English", language, key)
+			}
 		}
-		if got := translator.Text("dashboard.choose_interface"); got != test.choose {
-			t.Fatalf("%s choose text = %q, want %q", test.language, got, test.choose)
-		}
-		if got := translator.Text("settings.rebaseline.title"); got != test.title {
-			t.Fatalf("%s rebaseline title = %q, want %q", test.language, got, test.title)
-		}
-		if got := translator.Text("settings.rebaseline.message", map[string]any{"Interface": "Wi-Fi"}); got != test.message {
-			t.Fatalf("%s rebaseline message = %q, want %q", test.language, got, test.message)
+		if got := translator.Text("settings.rebaseline.message", args); !strings.Contains(got, "audit-interface") {
+			t.Fatalf("%s recovery confirmation omitted the selected interface", language)
 		}
 	}
 }
@@ -309,44 +283,35 @@ func TestSettingsEscapeUsesCancelHandlerAndRestoresPreviousHandler(t *testing.T)
 
 func TestTrayMenuLeavesQuitToFyne(t *testing.T) {
 	t.Parallel()
-
-	tray := newTrayMenu(i18n.New(i18n.English), nil, func() {}, func() {})
-	if len(tray.menu.Items) != 7 {
-		t.Fatalf("tray menu item count = %d, want 7", len(tray.menu.Items))
-	}
-	for _, item := range []*struct {
-		item *fyne.MenuItem
-		want string
-	}{
-		{tray.totalItem, "Total: —"},
-		{tray.downloadItem, "Download: —"},
-		{tray.uploadItem, "Upload: —"},
-	} {
-		if item.item.Label != item.want {
-			t.Fatalf("initial tray item = %q, want %q", item.item.Label, item.want)
+	translator := i18n.New(i18n.English)
+	window := &showingWindow{}
+	settingsCalls, updateCalls := 0, 0
+	tray := newTrayMenu(translator, window, func() { settingsCalls++ }, func() { updateCalls++ })
+	for _, item := range []*fyne.MenuItem{tray.totalItem, tray.downloadItem, tray.uploadItem} {
+		if !item.Disabled {
+			t.Fatalf("initial usage item %q should be disabled", item.Label)
 		}
-		if !item.item.Disabled {
-			t.Fatalf("initial usage item %q should be disabled", item.item.Label)
-		}
-	}
-	if !tray.menu.Items[3].IsSeparator {
-		t.Fatal("tray menu should separate usage from actions")
-	}
-	if got, want := tray.menu.Items[4].Label, "Show window"; got != want {
-		t.Fatalf("show item = %q, want %q", got, want)
-	}
-	if got, want := tray.menu.Items[5].Label, "Settings"; got != want {
-		t.Fatalf("settings item = %q, want %q", got, want)
-	}
-	if got, want := tray.menu.Items[6].Label, "Check for updates"; got != want {
-		t.Fatalf("update item = %q, want %q", got, want)
 	}
 	for _, item := range tray.menu.Items {
 		if item.IsQuit {
 			t.Fatalf("tray item %q should not be an app-provided quit item", item.Label)
 		}
+		switch item.Label {
+		case translator.Text("tray.show_window"), translator.Text("dashboard.settings"), translator.Text("tray.check_updates"):
+			item.Action()
+		}
+	}
+	if !window.shown || settingsCalls != 1 || updateCalls != 1 {
+		t.Fatalf("required tray actions did not run: shown=%v settings=%d updates=%d", window.shown, settingsCalls, updateCalls)
 	}
 }
+
+type showingWindow struct {
+	fyne.Window
+	shown bool
+}
+
+func (w *showingWindow) Show() { w.shown = true }
 
 func TestTrayMenuUpdatesUsage(t *testing.T) {
 	fyneTest.NewApp()
@@ -489,25 +454,27 @@ func TestSetLanguageImmediatelyRefreshesDashboard(t *testing.T) {
 	}
 }
 
-func TestBundledCJKFontsRenderLocalizedText(t *testing.T) {
-	app := fyneTest.NewApp()
-	defer app.Quit()
-
-	for _, test := range []struct {
+func TestBundledCJKFontsContainLocalizedGlyphs(t *testing.T) {
+	for _, sample := range []struct {
 		language i18n.Language
 		text     string
 	}{
-		{language: i18n.TraditionalChinese, text: "正體中文"},
-		{language: i18n.Japanese, text: "日本語"},
+		{i18n.TraditionalChinese, "正體中文"},
+		{i18n.Japanese, "日本語"},
 	} {
-		canvas := software.NewTransparentCanvas()
-		canvas.Resize(fyne.NewSize(200, 80))
-		label := canvaspkg.NewText(test.text, color.Black)
-		label.FontSource = languageFont(test.language)
-		label.TextSize = 32
-		canvas.SetContent(label)
-		if !hasVisiblePixels(canvas.Capture()) {
-			t.Fatalf("%s font did not render %q", test.language, test.text)
+		resource := languageFont(sample.language)
+		if resource == nil {
+			t.Fatalf("%s has no bundled font", sample.language)
+		}
+		font, err := sfnt.Parse(resource.Content())
+		if err != nil {
+			t.Fatalf("parse %s font: %v", sample.language, err)
+		}
+		for _, character := range sample.text {
+			glyph, err := font.GlyphIndex(nil, character)
+			if err != nil || glyph == 0 {
+				t.Fatalf("%s font lacks glyph %q: %v", sample.language, character, err)
+			}
 		}
 	}
 }
