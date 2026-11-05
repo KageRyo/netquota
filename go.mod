@@ -4,11 +4,12 @@ go 1.26.10
 
 require (
 	fyne.io/fyne/v2 v2.8.2
-	github.com/gen2brain/beeep v0.11.2
+	github.com/gen2brain/beeep v0.11.3
 	github.com/sergeymakinen/go-ico v1.0.0
 	github.com/shirou/gopsutil/v4 v4.26.9
 	github.com/srwiley/oksvg v0.0.0-20221011165216-be6e8873101c
 	github.com/srwiley/rasterx v0.0.0-20220730225603-2ab79fcdd4ef
+	golang.org/x/image v0.45.0
 	golang.org/x/sys v0.49.0
 )
 
@@ -48,7 +49,6 @@ require (
 	github.com/yuin/goldmark v1.8.2 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
-	golang.org/x/image v0.45.0 // indirect
 	golang.org/x/net v0.60.0 // indirect
 	golang.org/x/text v0.42.0 // indirect
 )
