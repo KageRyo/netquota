@@ -16,7 +16,7 @@ The workflow runs checks on `windows-latest` and `ubuntu-latest`, including `gov
 
 `SHA256SUMS` is required by the in-app updater. Do not publish a release with a missing or stale manifest: it must contain the hashes of `netquota-windows-amd64.zip`, `netquota-windows-amd64-setup.exe`, and `netquota-linux-amd64.tar.gz`.
 
-For every release candidate that changes the tray or Settings UI, complete [docs/accessibility-checklist.md](accessibility-checklist.md) on a real Linux and Windows desktop. CI covers the automated keyboard, rendering, font, and theme regressions; it does not replace screen-reader or operating-system high-contrast checks.
+For every release candidate that changes the tray or Settings UI, complete [docs/accessibility-checklist.md](accessibility-checklist.md) on a real Linux and Windows desktop, including the screen-reader and operating-system high-contrast checks. CI covers the automated keyboard, rendering, font, and theme regressions.
 
 ## Artifact provenance
 
